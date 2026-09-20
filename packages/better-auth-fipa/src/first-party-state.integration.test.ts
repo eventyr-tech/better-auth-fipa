@@ -814,6 +814,8 @@ for (const database of ["sqlite", "postgres"] as const) {
       });
     });
 
+    // Exercise 101 complete serial issuances; this checks pagination, not throughput.
+    // Coverage and parallel native builds can exceed Vitest's five-second default.
     it("retires all token families beyond the adapter's default page size", async () => {
       const f = await fixture(database);
       for (let index = 0; index < 101; index++)
@@ -830,7 +832,7 @@ for (const database of ["sqlite", "postgres"] as const) {
           where: [{ field: "status", value: "active" }],
         }),
       ).toBe(0);
-    });
+    }, 30_000);
 
     it("retirement racing with redemption leaves no live token family", async () => {
       const f = await fixture(database);
