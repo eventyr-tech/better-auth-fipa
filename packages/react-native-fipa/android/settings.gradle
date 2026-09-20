@@ -1,0 +1,9 @@
+pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+rootProject.name = "DeviceAttestationNative"
+// Standalone library verification. A consuming React Native app supplies this
+// included build from its own settings.gradle.
+def reactPlugin = providers.exec {
+    workingDir("..")
+    commandLine("node", "-p", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
+}.standardOutput.asText.get().trim()
+includeBuild(new File(reactPlugin).parentFile)

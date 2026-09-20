@@ -1,0 +1,100 @@
+{
+  "name": "@eventyr-tech/react-native-fipa",
+  "version": "0.1.0-alpha.0",
+  "description": "React Native client for attested first-party authentication with Better Auth FIPA.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Graham Arthur Blair",
+  "homepage": "https://github.com/eventyr-tech/better-auth-fipa#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eventyr-tech/better-auth-fipa.git",
+    "directory": "packages/react-native-fipa"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "default": "./dist/core.js"
+    },
+    "./first-party": {
+      "types": "./dist/first-party.d.ts",
+      "react-native": "./src/first-party.ts",
+      "default": "./dist/first-party.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "ios",
+    "android",
+    "*.podspec",
+    "react-native.config.cjs",
+    "README.md",
+    "LICENSE",
+    "!src/**/*.test.ts",
+    "!src/test-fixtures",
+    "!android/build",
+    "!android/.gradle",
+    "!android/local.properties",
+    "!android/src/test"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ios": "swift test",
+    "package:check": "publint && node scripts/package-smoke.mjs",
+    "test:android": "node scripts/verify-android.mjs"
+  },
+  "peerDependencies": {
+    "react": ">=19.2.0 <20",
+    "react-native": ">=0.86.0 <0.87.0",
+    "react-native-dpop": "1.0.0"
+  },
+  "devDependencies": {
+    "@better-auth/oauth-provider": "1.7.5",
+    "@eslint/js": "^9.39.2",
+    "@eventyr-tech/better-auth-fipa": "workspace:*",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "better-auth": "1.7.5",
+    "eslint": "^9.39.2",
+    "publint": "^0.3.21",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-dpop": "1.0.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.1.4"
+  },
+  "codegenConfig": {
+    "name": "DeviceAttestationSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.deviceattestation"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

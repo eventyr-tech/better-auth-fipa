@@ -1,0 +1,53 @@
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.12.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+    }
+}
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+react {
+    libraryName = "DeviceAttestationSpec"
+    codegenJavaPackageName = "com.deviceattestation"
+}
+if (project == rootProject) {
+    def resolvePackage = { name ->
+        new File(providers.exec {
+            workingDir("..")
+            commandLine("node", "-p", "require.resolve('${name}/package.json', { paths: [require.resolve('react-native/package.json')] })")
+        }.standardOutput.asText.get().trim()).parentFile
+    }
+    privateReact.reactNativeDir = resolvePackage("react-native")
+    privateReact.codegenDir = resolvePackage("@react-native/codegen")
+}
+
+android {
+    namespace "com.deviceattestation"
+    compileSdk 36
+    defaultConfig { minSdk 28 }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    testOptions {
+        unitTests.returnDefaultValues = false
+        unitTests.includeAndroidResources = true
+    }
+}
+repositories { google(); mavenCentral() }
+dependencies {
+    implementation("com.facebook.react:react-android:0.86.0")
+    implementation("com.google.android.play:integrity:1.6.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.browser:browser:1.9.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+}
