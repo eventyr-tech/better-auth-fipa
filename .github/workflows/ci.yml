@@ -35,7 +35,11 @@ jobs:
       - run: pnpm check
 
   postgres:
-    name: PostgreSQL contract
+    name: PostgreSQL contract (${{ matrix.adapter }})
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [kysely, drizzle]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -60,6 +64,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:postgres
+        if: matrix.adapter == 'kysely'
+      - run: pnpm test:drizzle
+        if: matrix.adapter == 'drizzle'
+      - run: pnpm test:consumer
+        if: matrix.adapter == 'drizzle'
 
   ios:
     name: iOS native consumer
