@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { consumerRunner, packNativePackage } from "./packed-consumer.mjs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,48 +8,33 @@ import { fileURLToPath } from "node:url";
 // separate gate for reference-app integration and physical-device acceptance.
 const root = fileURLToPath(new URL("..", import.meta.url));
 const temporary = mkdtempSync(join(tmpdir(), "attestation-android-consumer-"));
+const run = consumerRunner(temporary);
 try {
-  const directory = join(root, "packages/react-native-fipa");
-  const manifest = JSON.parse(
-    readFileSync(join(directory, "package.json"), "utf8"),
-  );
-  const [packed] = JSON.parse(
-    execFileSync("npm", ["pack", "--json", "--pack-destination", temporary], {
-      cwd: directory,
-      encoding: "utf8",
-    }),
-  );
+  const { manifest, filename } = packNativePackage(root, temporary);
   writeFileSync(
     join(temporary, "package.json"),
     JSON.stringify({
       name: "android-packed-library-consumer",
       private: true,
       dependencies: {
-        [manifest.name]: `file:./${packed.filename}`,
+        [manifest.name]: `file:./${filename}`,
         "react-native": manifest.devDependencies["react-native"],
         react: manifest.devDependencies.react,
         "react-native-dpop": manifest.devDependencies["react-native-dpop"],
       },
     }),
   );
-  execFileSync(
-    "npm",
-    [
-      "install",
-      "--ignore-scripts",
-      "--legacy-peer-deps",
-      "--no-audit",
-      "--no-fund",
-    ],
-    { cwd: temporary, stdio: "inherit" },
-  );
-  execFileSync(
+  run("npm", [
+    "install",
+    "--ignore-scripts",
+    "--legacy-peer-deps",
+    "--no-audit",
+    "--no-fund",
+  ]);
+  run(
     process.env.DEVICE_ATTESTATION_GRADLE ?? "gradle",
     ["--no-daemon", "--max-workers=2", "assembleDebug", "lintDebug"],
-    {
-      cwd: join(temporary, "node_modules", manifest.name, "android"),
-      stdio: "inherit",
-    },
+    join(temporary, "node_modules", manifest.name, "android"),
   );
   rmSync(temporary, { recursive: true, force: true });
   console.log(
