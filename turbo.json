@@ -1,0 +1,79 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "docs/**"],
+      "env": [
+        "EXPO_PUBLIC_SERVER_URL",
+        "EXPO_PUBLIC_APP_ATTEST_APPLICATION_ID",
+        "EXPO_PUBLIC_ANDROID_APPLICATION_ID",
+        "EXPO_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER"
+      ]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["TEST_POSTGRES"]
+    },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "env": ["TEST_POSTGRES"]
+    },
+    "package:check": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "test:postgres": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["TEST_POSTGRES"]
+    },
+    "test:ios": {
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": [
+        "APP_ATTEST_APPLICATION_ID",
+        "APP_ATTEST_ENVIRONMENT",
+        "EXAMPLE_BASE_URL",
+        "EXPO_PUBLIC_SERVER_URL",
+        "EXPO_PUBLIC_APP_ATTEST_APPLICATION_ID",
+        "EXPO_PUBLIC_ANDROID_APPLICATION_ID",
+        "EXPO_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER",
+        "EXAMPLE_PLATFORM",
+        "ANDROID_POLICY_FILE",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "EXAMPLE_DATABASE_PATH",
+        "EXAMPLE_AUTH_SECRET",
+        "EXAMPLE_ACCOUNT_EMAIL",
+        "EXAMPLE_ACCOUNT_PASSWORD"
+      ]
+    },
+    "@eventyr-tech/better-auth-fipa#build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/**",
+        "$TURBO_ROOT$/scripts/sync-server-docs.mjs"
+      ],
+      "outputs": ["dist/**", "docs/**"]
+    }
+  },
+  "globalPassThroughEnv": [
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "npm_config_cache",
+    "NPM_CONFIG_CACHE"
+  ]
+}

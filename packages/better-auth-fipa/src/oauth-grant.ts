@@ -153,6 +153,24 @@ export async function consumeCredentialIssuanceGrant(
   return verifiedCredentialIssuanceGrant(bound);
 }
 
+/** Internal legacy-login admission: consume the signed binding before account
+ * work, but defer user ownership until actual authentication and issuance.
+ * The caller must include this consumption in its continuation transaction. */
+export async function consumeOAuthAdmissionGrant(
+  runtime: RuntimeContext,
+  grantToken: string,
+  binding: OAuthAuthorizationBinding,
+) {
+  const verified = await consumeGrant(
+    runtime,
+    grantToken,
+    "oauth-authorization",
+    hashOAuthBinding(binding),
+  );
+  requireUsableCredential(verified.credential);
+  return verified;
+}
+
 async function consumeGrant(
   runtime: RuntimeContext,
   grantToken: string,
@@ -207,7 +225,13 @@ async function consumeGrant(
   ) {
     throw rejection("grant-binding", "grant_credential_mismatch");
   }
-  return { credential, exhaustedCredential, grant };
+  return {
+    credential,
+    exhaustedCredential,
+    grant,
+    verifiedAt: verification.createdAt,
+    expiresAt: verification.expiresAt,
+  };
 }
 
 function findCredential(runtime: RuntimeContext, credentialId: string) {

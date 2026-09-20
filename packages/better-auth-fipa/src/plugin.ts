@@ -124,6 +124,16 @@ export function createDeviceAttestation(options: DeviceAttestationOptions) {
                   if (hostResult === false) {
                     return false;
                   }
+                  if (
+                    context.options.plugins?.some(
+                      (plugin) =>
+                        plugin.id === "device-attestation-first-party",
+                    )
+                  ) {
+                    const { retireFirstPartyForUser } =
+                      await import("./first-party/public-retirement.js");
+                    await retireFirstPartyForUser(context, user.id);
+                  }
                   await retireCredentialsForUser(context, user.id);
                 },
               },
@@ -444,6 +454,22 @@ export function createDeviceAttestation(options: DeviceAttestationOptions) {
           },
         },
         async (ctx) => {
+          if (
+            ctx.context.options.plugins?.some(
+              (plugin) => plugin.id === "device-attestation-first-party",
+            )
+          ) {
+            const { retireFirstPartyForProvider } =
+              await import("./first-party/public-retirement.js");
+            if (
+              await retireFirstPartyForProvider(
+                ctx.context,
+                ctx.body.credentialId,
+                ctx.context.session.user.id,
+              )
+            )
+              return ctx.json({ retired: true });
+          }
           const retired =
             await ctx.context.adapter.incrementOne<StoredAttestationCredential>(
               {

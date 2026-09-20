@@ -201,9 +201,12 @@ export async function enforceUnboundCredentialQuota(
   }
 }
 
-export function requireUsableCredential(
-  credential: StoredAttestationCredential | null,
-): asserts credential is StoredAttestationCredential {
+export function requireUsableCredential<
+  T extends Pick<
+    StoredAttestationCredential,
+    "status" | "publicKey" | "userId" | "externallyBound" | "unboundExpiresAt"
+  >,
+>(credential: T | null): asserts credential is T {
   if (!credential || credential.status !== "active" || !credential.publicKey) {
     throw new DeviceAttestationError({
       code: "DEVICE_ATTESTATION_CREDENTIAL_REQUIRED",

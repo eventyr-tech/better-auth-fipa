@@ -12,9 +12,7 @@ import { execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 const repository = dirname(dirname(fileURLToPath(import.meta.url)));
-const temporaryDirectory = mkdtempSync(
-  join(tmpdir(), "better-auth-device-attestation-"),
-);
+const temporaryDirectory = mkdtempSync(join(tmpdir(), "better-auth-fipa-"));
 
 try {
   const packed = JSON.parse(
@@ -52,11 +50,39 @@ try {
       "--input-type=module",
       "--eval",
       [
-        'const server = await import("@grablair/better-auth-device-attestation");',
-        'const client = await import("@grablair/better-auth-device-attestation/client");',
+        'const server = await import("@eventyr-tech/better-auth-fipa");',
+        'const client = await import("@eventyr-tech/better-auth-fipa/client");',
         'if (typeof server.appAttest !== "function") throw new TypeError("Missing appAttest export");',
         'if (typeof server.createDeviceAttestation !== "function") throw new TypeError("Missing createDeviceAttestation export");',
         'if (typeof client.deviceAttestationClient !== "function") throw new TypeError("Missing client export");',
+      ].join("\n"),
+    ],
+    { cwd: consumer, stdio: "pipe" },
+  );
+
+  // The legacy root/client entries above must work without the optional peer.
+  // The FiPA entry explicitly opts into the OAuth provider runtime.
+  execFileSync(
+    "npm",
+    [
+      "install",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "@better-auth/oauth-provider@1.7.5",
+    ],
+    { cwd: consumer, stdio: "pipe" },
+  );
+  execFileSync(
+    execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      [
+        'const native = await import("@eventyr-tech/better-auth-fipa/first-party");',
+        'if (typeof native.androidHardware !== "function") throw new TypeError("Missing Android provider export");',
+        'if (typeof native.resolveFirstPartyTokenContext !== "function") throw new TypeError("Missing first-party claims resolver export");',
+        'if (typeof native.createNativeFirstPartyPlugin !== "function" || typeof native.requireNativeAccess !== "function") throw new TypeError("Missing first-party exports");',
       ].join("\n"),
     ],
     { cwd: consumer, stdio: "pipe" },
@@ -67,8 +93,8 @@ try {
       "--input-type=commonjs",
       "--eval",
       [
-        'require.resolve("@grablair/better-auth-device-attestation");',
-        'require.resolve("@grablair/better-auth-device-attestation/client");',
+        'require.resolve("@eventyr-tech/better-auth-fipa");',
+        'require.resolve("@eventyr-tech/better-auth-fipa/client");',
       ].join("\n"),
     ],
     { cwd: consumer, stdio: "pipe" },
@@ -79,14 +105,14 @@ try {
       join(
         consumer,
         "node_modules",
-        "@grablair",
-        "better-auth-device-attestation",
+        "@eventyr",
+        "better-auth-fipa",
         "package.json",
       ),
       "utf8",
     ),
   );
-  if (installedPackage.name !== "@grablair/better-auth-device-attestation") {
+  if (installedPackage.name !== "@eventyr-tech/better-auth-fipa") {
     throw new TypeError("Installed package metadata is invalid.");
   }
 } finally {

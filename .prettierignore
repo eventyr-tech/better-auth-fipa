@@ -1,3 +1,13 @@
-dist/
-coverage/
+**/dist/
+**/coverage/
+**/.turbo/
+**/.expo/
+**/.build/
+**/Pods/
+.artifacts/
 pnpm-lock.yaml
+packages/better-auth-fipa/docs/
+apps/example-mobile/ios/
+apps/example-mobile/android/
+packages/react-native-fipa/android/build/
+packages/react-native-fipa/android/.gradle/
