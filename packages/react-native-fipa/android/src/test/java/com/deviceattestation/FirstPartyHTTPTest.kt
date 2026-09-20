@@ -367,17 +367,33 @@ class FirstPartyHTTPTest {
 
     @Test
     fun capsOutstandingCallsAndRejectsDuplicateIds() {
+        // Hold calls before socket creation: this tests admission/cancellation,
+        // not the host's ability to establish 32 loopback connections at once.
+        val release = CountDownLatch(1)
+        val transport =
+            newClient(
+                OkHttpClient.Builder().addInterceptor {
+                    check(release.await(30, TimeUnit.SECONDS))
+                    throw java.io.IOException("Released test call")
+                }
+            )
         val requests = mutableListOf<Pair<String, CompletableFuture<FirstPartyHTTPResponse>>>()
-        repeat(32) {
-            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
-            val requestId = id()
-            requests.add(requestId to send(requestId = requestId, timeout = 120000.0))
-        }
-        rejected("http_unavailable", send(requestId = requests[0].first))
-        rejected("http_unavailable", send())
-        requests.forEach {
-            client.cancel(it.first)
-            rejected("http_cancelled", it.second)
+        try {
+            repeat(32) {
+                val requestId = id()
+                requests.add(
+                    requestId to
+                        send(requestId = requestId, timeout = 120000.0, transport = transport)
+                )
+            }
+            rejected("http_unavailable", send(requestId = requests[0].first, transport = transport))
+            rejected("http_unavailable", send(transport = transport))
+            requests.forEach {
+                transport.cancel(it.first)
+                rejected("http_cancelled", it.second)
+            }
+        } finally {
+            release.countDown()
         }
     }
 
