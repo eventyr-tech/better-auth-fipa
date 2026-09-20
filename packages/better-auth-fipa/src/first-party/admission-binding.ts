@@ -1,3 +1,4 @@
+import { admissionBindingFields } from "./binding-fields.js";
 import { z } from "zod";
 import { sha256 } from "../protocol/crypto.js";
 import { FIRST_PARTY_PROFILE } from "./wire.js";
@@ -55,28 +56,7 @@ export function encodeNativeAdmissionBinding(
   input: NativeAdmissionBinding,
 ): Buffer {
   const binding = normalizeNativeAdmissionBinding(input);
-  return Buffer.from(
-    JSON.stringify([
-      "better-auth-device-attestation/first-party-admission-binding/v1",
-      binding.profile,
-      binding.mode,
-      binding.issuer,
-      binding.clientId,
-      binding.provider,
-      binding.applicationId,
-      binding.environment,
-      binding.attemptId,
-      binding.codeChallenge,
-      binding.codeChallengeMethod,
-      binding.dpopJkt,
-      binding.scopes,
-      binding.resources,
-      binding.nonce ?? null,
-      binding.acrValues ?? null,
-      binding.maxAge ?? null,
-    ]),
-    "utf8",
-  );
+  return Buffer.from(JSON.stringify(admissionBindingFields(binding)), "utf8");
 }
 export function hashNativeAdmissionBinding(
   input: NativeAdmissionBinding,

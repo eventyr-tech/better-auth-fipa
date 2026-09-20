@@ -1,3 +1,4 @@
+import { androidRegistrationFields } from "./binding-fields.js";
 import { DeviceAttestationError } from "../errors.js";
 import {
   maintainAndroidUnboundCredentials,
@@ -86,11 +87,12 @@ export function androidRegistrationRequestHash(
   decodeDigest(challenge);
   return sha256(
     Buffer.from(
-      JSON.stringify([
-        "better-auth-device-attestation/android-registration/v1",
-        challenge,
-        hashNativeAdmissionBinding(binding).toString("base64url"),
-      ]),
+      JSON.stringify(
+        androidRegistrationFields(
+          challenge,
+          hashNativeAdmissionBinding(binding).toString("base64url"),
+        ),
+      ),
     ),
   ).toString("base64url");
 }

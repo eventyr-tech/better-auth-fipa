@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "check": "pnpm format:check && turbo run build lint typecheck test:coverage package:check",
+    "check": "node scripts/sync-first-party-protocol.mjs --check && pnpm format:check && turbo run build lint typecheck test:coverage package:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
