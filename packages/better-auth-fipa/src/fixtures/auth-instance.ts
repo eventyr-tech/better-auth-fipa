@@ -25,6 +25,8 @@ export async function getTestInstance<
     clientOptions?: C;
   },
 ) {
+  let postgresPool: Pool | undefined;
+  let postgresSchema: string | undefined;
   let database:
     | DatabaseSync
     | {
@@ -34,10 +36,15 @@ export async function getTestInstance<
       };
   if (config.testWith === "postgres") {
     const schema = `fipa_test_${randomUUID().replaceAll("-", "_")}`;
+    postgresSchema = schema;
     const pool = new Pool({
-      connectionString: "postgres://user:password@127.0.0.1:5432/better_auth",
+      application_name: schema,
+      connectionString:
+        process.env.TEST_DATABASE_URL ??
+        "postgres://user:password@127.0.0.1:5432/better_auth",
       options: `-c search_path=${schema},public`,
     });
+    postgresPool = pool;
     const db = new Kysely({ dialect: new PostgresDialect({ pool }) });
     // Register before setup, so even a failed migration releases the database.
     onTestFinished(async () => {
@@ -79,8 +86,21 @@ export async function getTestInstance<
     },
     plugins: [bearer(), ...(options.plugins ?? [])],
   } satisfies BetterAuthOptions;
-  await (await getMigrations(authOptions)).runMigrations();
-  const auth = betterAuth(authOptions as BetterAuthOptions);
+  const runtimeOptions: BetterAuthOptions = authOptions;
+  if (process.env.TEST_ADAPTER === "drizzle") {
+    const { createDrizzlePostgresFixture } =
+      await import("./drizzle-postgres.js");
+    if (!postgresPool || !postgresSchema)
+      throw new Error("Drizzle contract requires PostgreSQL");
+    runtimeOptions.database = await createDrizzlePostgresFixture(
+      postgresPool,
+      runtimeOptions,
+      postgresSchema,
+    );
+  } else {
+    await (await getMigrations(runtimeOptions)).runMigrations();
+  }
+  const auth = betterAuth(runtimeOptions);
   const testUser = {
     email: "test@test.com",
     password: "test123456",
@@ -96,6 +116,10 @@ export async function getTestInstance<
     },
   });
   return {
+    postgres:
+      postgresPool && postgresSchema
+        ? { pool: postgresPool, schema: postgresSchema }
+        : undefined,
     auth: auth as unknown as Auth<O>,
     client,
     testUser,

@@ -33,7 +33,12 @@
     "test:postgres": {
       "dependsOn": ["^build"],
       "cache": false,
-      "passThroughEnv": ["TEST_POSTGRES"]
+      "passThroughEnv": ["TEST_POSTGRES", "TEST_DATABASE_URL"]
+    },
+    "test:drizzle": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["TEST_DATABASE_URL"]
     },
     "test:ios": {
       "cache": false

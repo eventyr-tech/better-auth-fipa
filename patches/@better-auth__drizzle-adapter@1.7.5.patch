@@ -1,0 +1,26 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 9d8158941490e22bfdb27d0bd7eac368b47b827d..a80d211c0f17ccae7bd2ac25e9d4e99f8b1e9d96 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -532,7 +532,7 @@ const drizzleAdapter = (db, config) => {
+ 				}
+ 				if (!idColumn) return null;
+ 				const targetIds = db.select({ id: idColumn }).from(schemaModel).where(...clause).limit(1);
+-				return (await db.update(schemaModel).set(assignments).where(inArray(idColumn, targetIds)).returning())[0] ?? null;
++				return (await db.update(schemaModel).set(assignments).where(and(...clause, inArray(idColumn, targetIds))).returning())[0] ?? null;
+ 			},
+ 			options: config
+ 		};
+diff --git a/dist/relations-v2/index.mjs b/dist/relations-v2/index.mjs
+index 319bf66551b4004c025abd6c67e20451655ebe67..46996d33718028c8e7ffbd91a64a9efedfac6698 100644
+--- a/dist/relations-v2/index.mjs
++++ b/dist/relations-v2/index.mjs
+@@ -505,7 +505,7 @@ const drizzleAdapter = (db, config) => {
+ 				}
+ 				if (!idColumn) return null;
+ 				const targetIds = db.select({ id: idColumn }).from(schemaModel).where(...clause).limit(1);
+-				return (await db.update(schemaModel).set(assignments).where(inArray(idColumn, targetIds)).returning())[0] ?? null;
++				return (await db.update(schemaModel).set(assignments).where(and(...clause, inArray(idColumn, targetIds))).returning())[0] ?? null;
+ 			},
+ 			async createSchema(props) {
+ 				const { generateDrizzleSchema } = await import("../generate-drizzle-schema-iWvrXnu0.mjs");
