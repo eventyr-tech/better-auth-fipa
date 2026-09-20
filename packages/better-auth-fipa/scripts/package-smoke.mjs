@@ -105,7 +105,7 @@ try {
       join(
         consumer,
         "node_modules",
-        "@eventyr",
+        "@eventyr-tech",
         "better-auth-fipa",
         "package.json",
       ),
