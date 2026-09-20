@@ -367,3 +367,26 @@ describe("iOS registration adapter", () => {
     expect(f.native.dpop.prepareDpop).not.toHaveBeenCalled();
   });
 });
+
+it.each(["prepare", "admission"] as const)(
+  "reports cancellation when native %s fails after abort",
+  async (operation) => {
+    const f = fixture();
+    const fail = () => {
+      f.controller.abort();
+      return Promise.reject(new Error("native detail"));
+    };
+    if (operation === "prepare") {
+      f.native.dpop.prepareDpop.mockImplementationOnce(fail);
+      await expect(f.keys.prepare("slot", f.context)).rejects.toMatchObject({
+        code: "cancelled",
+      });
+    } else {
+      f.registered();
+      f.native.appAttest.generateEvidence.mockImplementationOnce(fail);
+      await expect(
+        f.keys.admission(f.identity, f.binding, f.context),
+      ).rejects.toMatchObject({ code: "cancelled" });
+    }
+  },
+);

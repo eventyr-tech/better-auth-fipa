@@ -1,3 +1,5 @@
+import { androidIdentitySchema } from "./android-identity.ts";
+import { iosIdentitySchema } from "./ios-identity.ts";
 import { createMemorySessionVault as vault } from "../test-fixtures/session-vault.ts";
 import {
   createHash,
@@ -292,6 +294,7 @@ async function fixture(options: { ios?: boolean; emailOTP?: boolean } = {}) {
       },
     },
     keys: {
+      identitySchema: z.union([iosIdentitySchema, androidIdentitySchema]),
       remove: vi.fn(() => {
         expect(JSON.parse(storage.record.identityJSON!)).toMatchObject({
           retired: true,
@@ -2249,7 +2252,7 @@ describe("FiPA client against real Better Auth endpoints", () => {
     const f = await fixture({ ios: true });
     f.controls.loseRegistrationResponse = true;
     await expect(f.client.start("slot")).rejects.toMatchObject({
-      code: "operation_failed",
+      code: "request_failed",
     });
     expect(JSON.parse(f.storage.record.identityJSON!)).toMatchObject({
       providerRegistration: "attesting",

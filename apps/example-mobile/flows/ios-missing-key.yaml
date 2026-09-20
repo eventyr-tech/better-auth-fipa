@@ -38,7 +38,7 @@ appId: io.eventyr.attestationlab
     element:
       id: auth-status
     direction: DOWN
-- assertVisible: "Authentication: operation_failed"
+- assertVisible: "Authentication: registration_recovery_required"
 - runShell:
     node scripts/device-lab/recovery-evidence.mjs failed-restore
     "${TEST_DATABASE_PATH}" "${TEST_EVIDENCE_PATH}" "${TEST_SUBJECT}"

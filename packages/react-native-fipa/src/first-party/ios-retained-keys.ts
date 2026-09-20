@@ -1,26 +1,21 @@
+import { identifier } from "./identity.ts";
 import { z } from "zod";
 import type { Spec as AppAttest } from "../NativeDeviceAttestation.ts";
 import type { Spec as Transport } from "../NativeFirstPartyTransport.ts";
 import { FirstPartyClientError } from "./errors.ts";
 
-const identifier = z.string().min(1).max(256);
-const digest = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const reference = z.strictObject({
   keyIdStoragePrefix: identifier,
   credentialScope: identifier,
   dpopAlias: identifier,
 });
 export type RetainedIOSKeyReference = z.infer<typeof reference>;
-export const retainedIOSIdentitySchema = z.strictObject({
-  version: z.literal(1),
-  dpopAlias: identifier,
-  dpopJkt: digest,
-  providerScope: identifier,
-  providerStoragePrefix: identifier,
-  providerKeyId: z.string().min(1).max(2048),
-  providerRegistration: z.literal("unknown"),
-});
-export type RetainedIOSIdentity = z.infer<typeof retainedIOSIdentitySchema>;
+export { importedIdentitySchema as retainedIOSIdentitySchema } from "./identity.ts";
+import {
+  importedIdentitySchema as retainedIOSIdentitySchema,
+  type ImportedIdentity,
+} from "./identity.ts";
+export type RetainedIOSIdentity = ImportedIdentity;
 
 /** Read-only by construction: these ports expose no generation, reset, deletion
  * or token operations. Old session bytes and caller-provided subjects are never accepted. */

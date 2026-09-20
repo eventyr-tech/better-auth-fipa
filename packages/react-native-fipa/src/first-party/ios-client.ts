@@ -43,7 +43,13 @@ export function createIOSFirstPartyClient(
           send,
         },
       ),
-    { keyIdStoragePrefix },
+    {
+      normalizeReference: (identity) => ({
+        ...identity,
+        providerStoragePrefix:
+          identity.providerStoragePrefix ?? keyIdStoragePrefix,
+      }),
+    },
   );
   return {
     ...client,

@@ -1,11 +1,21 @@
+import { digest, identifier } from "./identity.ts";
+import {
+  assertAdmissionBinding,
+  normalizeIssuer,
+  nativeOperation as call,
+  checkCancelled,
+  createAdmissionTransport,
+  successfulResponse as success,
+  signProof,
+  aliasesSchema,
+} from "./adapter-operations.ts";
+import { iosIdentitySchema } from "./ios-identity.ts";
 import { z } from "zod";
 import type { Spec as AppAttest } from "../NativeDeviceAttestation.ts";
 import type { Spec as Transport } from "../NativeFirstPartyTransport.ts";
 import type { FirstPartyClientPorts, NativeIdentity } from "./client.ts";
 import { FirstPartyClientError } from "./errors.ts";
 
-const digest = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-const identifier = z.string().min(1).max(256);
 const keyId = z.string().min(1).max(2048);
 const challengeSchema = z.object({
   challengeToken: z.string().min(1).max(128),
@@ -53,21 +63,7 @@ export function createIOSKeyPorts(
   options = { ...options };
   let issuer: string;
   try {
-    const url = new URL(options.issuer);
-    if (
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.protocol !== "https:" &&
-        !(
-          options.allowInsecureLoopback === true &&
-          url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-        ))
-    )
-      throw new Error();
-    issuer = url.href.replace(/\/+$/u, "");
+    issuer = normalizeIssuer(options.issuer, options.allowInsecureLoopback);
     identifier.parse(options.clientId);
     identifier.parse(options.applicationId);
     identifier.parse(options.keyIdStoragePrefix);
@@ -76,65 +72,30 @@ export function createIOSKeyPorts(
     throw new FirstPartyClientError("invalid_configuration");
   }
   const check = (context: AdmissionContext) => {
-    if (context.signal.aborted) throw new FirstPartyClientError("cancelled");
+    checkCancelled(context.signal);
   };
-  async function call<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation();
-    } catch {
-      throw new FirstPartyClientError("operation_failed");
-    }
-  }
-  async function available(identity: NativeIdentity) {
-    const existing = await call(() =>
-      native.appAttest.getKey(
-        identity.providerStoragePrefix ?? options.keyIdStoragePrefix,
-        identity.providerScope,
-      ),
+  async function available(identity: NativeIdentity, signal?: AbortSignal) {
+    const existing = await call(
+      () =>
+        native.appAttest.getKey(
+          iosIdentitySchema.parse(identity).providerStoragePrefix ??
+            options.keyIdStoragePrefix,
+          identity.providerScope,
+        ),
+      signal,
     );
     if (existing !== identity.providerKeyId)
       throw new FirstPartyClientError("registration_recovery_required");
-    const jkt = await call(() => native.dpop.inspectDpop(identity.dpopAlias));
+    const jkt = await call(
+      () => native.dpop.inspectDpop(identity.dpopAlias),
+      signal,
+    );
     if (jkt !== identity.dpopJkt)
       throw new FirstPartyClientError("registration_recovery_required");
   }
-  async function post(path: string, body: unknown, context: AdmissionContext) {
-    check(context);
-    const url = `${issuer}${path}`;
-    const response = await native.send({
-      url,
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: context.signal,
-      maximumResponseBytes: 65536,
-    });
-    check(context);
-    if (
-      response.url !== url ||
-      !Number.isInteger(response.status) ||
-      response.status < 200 ||
-      response.status >= 600 ||
-      (response.status >= 300 && response.status < 400) ||
-      new TextEncoder().encode(response.body).byteLength > 65536
-    )
-      throw new FirstPartyClientError("invalid_response");
-    let payload: unknown;
-    try {
-      payload = JSON.parse(response.body);
-    } catch {
-      throw new FirstPartyClientError("invalid_response");
-    }
-    return { status: response.status, body: payload };
-  }
-  function success(response: { status: number; body: unknown }) {
-    if (response.status !== 200)
-      throw new FirstPartyClientError("request_failed");
-    return response.body;
-  }
+  const send = createAdmissionTransport(issuer, native.send);
+  const post = (path: string, body: unknown, context: AdmissionContext) =>
+    send(path, body, context.signal);
   function challenge(response: { status: number; body: unknown }) {
     const parsed = challengeSchema.safeParse(success(response));
     if (!parsed.success) throw new FirstPartyClientError("invalid_response");
@@ -147,12 +108,14 @@ export function createIOSKeyPorts(
     context: AdmissionContext,
   ) {
     check(context);
-    const value = await call(() =>
-      native.appAttest.generateEvidence(
-        identity.providerKeyId,
-        clientData,
-        operation,
-      ),
+    const value = await call(
+      () =>
+        native.appAttest.generateEvidence(
+          identity.providerKeyId,
+          clientData,
+          operation,
+        ),
+      context.signal,
     );
     check(context);
     const parsed = evidenceSchema.safeParse(value);
@@ -160,24 +123,29 @@ export function createIOSKeyPorts(
     return parsed.data;
   }
   return {
-    prepare: async (slot) => {
-      const aliases = z
-        .strictObject({ dpopAlias: identifier, providerScope: identifier })
-        .safeParse(await options.aliases(slot));
+    identitySchema: iosIdentitySchema,
+    prepare: async (slot, context) => {
+      checkCancelled(context?.signal);
+      const aliases = aliasesSchema.safeParse(await options.aliases(slot));
       if (!aliases.success)
         throw new FirstPartyClientError("invalid_configuration");
       const dpopJkt = digest.safeParse(
-        await call(() => native.dpop.prepareDpop(aliases.data.dpopAlias)),
+        await call(
+          () => native.dpop.prepareDpop(aliases.data.dpopAlias),
+          context?.signal,
+        ),
       );
       if (!dpopJkt.success) throw new FirstPartyClientError("invalid_response");
       const key = z
         .strictObject({ keyId, created: z.boolean() })
         .safeParse(
-          await call(() =>
-            native.appAttest.getOrCreateKey(
-              options.keyIdStoragePrefix,
-              aliases.data.providerScope,
-            ),
+          await call(
+            () =>
+              native.appAttest.getOrCreateKey(
+                options.keyIdStoragePrefix,
+                aliases.data.providerScope,
+              ),
+            context?.signal,
           ),
         );
       if (!key.success) throw new FirstPartyClientError("invalid_response");
@@ -194,7 +162,8 @@ export function createIOSKeyPorts(
       if (!identity.retired) throw new FirstPartyClientError("invalid_state");
       await call(() =>
         native.appAttest.removeKey(
-          identity.providerStoragePrefix ?? options.keyIdStoragePrefix,
+          iosIdentitySchema.parse(identity).providerStoragePrefix ??
+            options.keyIdStoragePrefix,
           identity.providerScope,
           identity.providerKeyId,
         ),
@@ -203,38 +172,18 @@ export function createIOSKeyPorts(
         native.dpop.removeDpop(identity.dpopAlias, identity.dpopJkt),
       );
     },
-    proof: async (identity, request) => {
-      // inspect/sign never create a key, including when an imported alias is absent.
-      const proof = await call(() =>
-        native.dpop.signDpop(
-          identity.dpopAlias,
-          identity.dpopJkt,
-          request.url,
-          request.method,
-          request.accessToken ?? null,
-          request.nonce ?? null,
-        ),
-      );
-      if (
-        typeof proof !== "string" ||
-        proof.length > 16384 ||
-        !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(proof)
-      )
-        throw new FirstPartyClientError("invalid_response");
-      return proof;
-    },
+    proof: (identity, request) =>
+      signProof((...args) => native.dpop.signDpop(...args), identity, request),
     admission: async (identity, binding, context) => {
       check(context);
-      if (
-        binding.provider !== "app-attest" ||
-        binding.dpopJkt !== identity.dpopJkt ||
-        binding.issuer !== issuer ||
-        binding.clientId !== options.clientId ||
-        binding.applicationId !== options.applicationId ||
-        binding.environment !== options.environment
-      )
-        throw new FirstPartyClientError("invalid_state");
-      await available(identity);
+      assertAdmissionBinding(binding, identity, {
+        issuer,
+        provider: "app-attest",
+        clientId: options.clientId,
+        applicationId: options.applicationId,
+        environment: options.environment,
+      });
+      await available(identity, context.signal);
       const probe = () =>
         post(
           "/first-party/attestation/challenge",

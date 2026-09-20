@@ -1,3 +1,4 @@
+import { transportError } from "./adapter-operations.ts";
 import { z } from "zod";
 import type { Spec } from "../NativeFirstPartyTransport.ts";
 import { FirstPartyClientError } from "./errors.ts";
@@ -89,22 +90,7 @@ export function createNativeProtocolTransport(
           headers,
         };
       } catch (error) {
-        if (error instanceof FirstPartyClientError) throw error;
-        const code =
-          error && typeof error === "object" && "code" in error
-            ? error.code
-            : undefined;
-        if (code === "http_cancelled")
-          throw new FirstPartyClientError("cancelled");
-        if (
-          [
-            "http_redirect_rejected",
-            "http_invalid_response",
-            "http_response_too_large",
-          ].includes(String(code))
-        )
-          throw new FirstPartyClientError("invalid_response");
-        throw new FirstPartyClientError("request_failed");
+        throw transportError(error);
       } finally {
         request.signal.removeEventListener("abort", interrupted);
       }

@@ -1,10 +1,20 @@
+import { digest, identifier } from "./identity.ts";
+import {
+  normalizeIssuer,
+  jsonResponse,
+  validateResponse,
+} from "./adapter-operations.ts";
 import { z } from "zod";
 import { rejectedDpopNonce } from "./dpop-nonce.ts";
 import { FirstPartyClientError } from "./errors.ts";
 import {
-  retainedIOSIdentitySchema,
-  type RetainedIOSIdentity,
-} from "./ios-retained-keys.ts";
+  importedIdentitySchema,
+  type ImportedIdentity,
+  accountSchema,
+  assertRegistrationAdvance,
+  type NativeIdentity,
+} from "./identity.ts";
+export type { NativeIdentity } from "./identity.ts";
 import {
   authorizationCallback,
   registeredCallback,
@@ -16,39 +26,8 @@ import {
 } from "./session-coordinator.ts";
 
 const PROFILE = "device-attestation-fipa-v1";
-const digest = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-const identifier = z.string().min(1).max(256);
 const capability = z.string().min(1).max(16384);
-const accountSchema = z.strictObject({
-  subject: identifier,
-  credentialId: identifier,
-});
 export type ConfirmedAccount = z.infer<typeof accountSchema>;
-const identitySchema = z.strictObject({
-  version: z.literal(1),
-  dpopAlias: identifier,
-  dpopJkt: digest,
-  providerKeyId: z.string().min(1).max(2048),
-  providerScope: identifier,
-  providerStoragePrefix: identifier.optional(),
-  retired: z.literal(true).optional(),
-  keysRemoved: z.literal(true).optional(),
-  superseded: z.literal(true).optional(),
-  account: accountSchema.optional(),
-  providerRegistration: z
-    .enum(["generated", "attesting", "registered", "unknown"])
-    .optional(),
-  // The enrollment nonce predates the Android signing key. Persist its server
-  // handle with the identity so a restart never invents a new key challenge.
-  androidEnrollment: z
-    .strictObject({
-      keyChallengeToken: digest,
-      attestationChallenge: digest,
-      issuedAt: z.iso.datetime(),
-      expiresAt: z.iso.datetime(),
-    })
-    .optional(),
-});
 const bindingSchema = z.strictObject({
   profile: z.literal(PROFILE),
   mode: z.literal("native"),
@@ -117,7 +96,6 @@ const sessionSchema = z.discriminatedUnion("phase", [
 ]);
 type Pending = z.infer<typeof pendingSchema>;
 type Session = z.infer<typeof sessionSchema>;
-export type NativeIdentity = z.infer<typeof identitySchema>;
 export type NativeBinding = z.infer<typeof bindingSchema>;
 export interface ResourceResponse {
   url: string;
@@ -170,7 +148,10 @@ export interface FirstPartyClientPorts {
     transaction(): Promise<{ id: string; verifier: string; challenge: string }>;
   };
   keys: {
-    /** Only called for an empty identity record. Stable slot aliases must recover lost creation results. */
+    /** Strict provider-owned v1 codec; must preserve all immutable reference fields. */
+    identitySchema: z.ZodType<NativeIdentity>;
+    /** Only called for an empty identity record. Stable aliases recover lost creation results.
+     * Honor abort before/after native work; never overwrite occupied aliases. */
     prepare(
       this: void,
       slotId: string,
@@ -190,7 +171,9 @@ export interface FirstPartyClientPorts {
         nonce?: string;
       },
     ): Promise<string>;
-    /** Registers if necessary and obtains fresh evidence through server verification under this slot lease. */
+    /** Registers if necessary and obtains server-verified admission under this slot lease.
+     * Persist one-use enrollment progress before sending. Never retry uncertain enrollment.
+     * Cancellation must surface as cancelled; missing keys require explicit recovery. */
     admission(
       this: void,
       identity: NativeIdentity,
@@ -263,24 +246,11 @@ export function createFirstPartyClientCore(
   config: FirstPartyClientConfiguration,
   ports: FirstPartyClientPorts,
 ) {
+  const identitySchema = ports.keys.identitySchema;
   config = { ...config };
   let issuer: string;
   try {
-    const url = new URL(config.issuer);
-    if (
-      (url.protocol !== "https:" &&
-        !(
-          config.allowInsecureLoopback &&
-          url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-        )) ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
-      throw new Error();
-    issuer = url.href.replace(/\/+$/u, "");
+    issuer = normalizeIssuer(config.issuer, config.allowInsecureLoopback);
     for (const value of [
       config.clientId,
       config.applicationId,
@@ -537,16 +507,7 @@ export function createFirstPartyClientCore(
         signal: tx.signal,
         headers: { ...request.headers, DPoP: proof },
       });
-      if (
-        response.url !== request.url ||
-        !Number.isInteger(response.status) ||
-        response.status < 200 ||
-        response.status >= 600 ||
-        (response.status >= 300 && response.status < 400) ||
-        new TextEncoder().encode(response.body).byteLength >
-          request.maximumResponseBytes
-      )
-        throw new FirstPartyClientError("invalid_response");
+      validateResponse(response, request.url, request.maximumResponseBytes);
       nonce = rejectedDpopNonce(response, accessToken !== undefined);
       if (nonce === undefined) return response;
       if (attempt === 1) throw new FirstPartyClientError("request_failed");
@@ -570,12 +531,7 @@ export function createFirstPartyClientCore(
       body: parameters.toString(),
       maximumResponseBytes: 65536,
     });
-    let body: unknown;
-    try {
-      body = JSON.parse(response.body);
-    } catch {
-      throw new FirstPartyClientError("invalid_response");
-    }
+    const body = jsonResponse(response.body);
     const retry = Object.entries(response.headers ?? {}).find(
       ([name]) => name.toLowerCase() === "retry-after",
     )?.[1];
@@ -755,17 +711,7 @@ export function createFirstPartyClientCore(
       async saveIdentity(next: NativeIdentity) {
         const parsed = identitySchema.safeParse(next);
         if (!parsed.success) throw new FirstPartyClientError("invalid_state");
-        const { providerRegistration: before, ...oldKey } = identity;
-        const { providerRegistration: after, ...newKey } = parsed.data;
-        if (
-          JSON.stringify(oldKey) !== JSON.stringify(newKey) ||
-          !(
-            after === before ||
-            after === "registered" ||
-            (before === "generated" && after === "attesting")
-          )
-        )
-          throw new FirstPartyClientError("invalid_state");
+        assertRegistrationAdvance(identity, parsed.data);
         await tx.saveIdentity(parsed.data);
         // Keep final commit consistent with durable progress, including when the
         // provider returns a fresh object instead of mutating its input.
@@ -1041,9 +987,9 @@ export function createFirstPartyClientCore(
      * account identity is accepted, and no missing key may be generated here. */
     installRetainedIdentity(
       slot: string,
-      input: RetainedIOSIdentity,
+      input: ImportedIdentity,
     ): Promise<void> {
-      const parsed = retainedIOSIdentitySchema.safeParse(input);
+      const parsed = importedIdentitySchema.safeParse(input);
       if (!parsed.success) throw new FirstPartyClientError("invalid_request");
       return run(
         slot,

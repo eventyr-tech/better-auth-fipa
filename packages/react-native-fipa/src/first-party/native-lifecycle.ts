@@ -1,3 +1,4 @@
+import type { NativeIdentity } from "./identity.ts";
 import type { Spec as Transport } from "../NativeFirstPartyTransport.ts";
 import type { SessionVaultNative } from "./session-coordinator.ts";
 import { createAccountCatalog } from "./account-catalog.ts";
@@ -29,7 +30,7 @@ export function createNativeLifecycle(
     aliases: ReturnType<typeof createAccountCatalog>["aliases"];
     send: FirstPartyClientPorts["send"];
   }) => FirstPartyClientPorts["keys"],
-  retainedIOS?: { keyIdStoragePrefix: string },
+  imports?: { normalizeReference(identity: NativeIdentity): NativeIdentity },
 ) {
   const transport = createNativeProtocolTransport(native.transport, config);
   const core = createFirstPartyClientCore(config, {
@@ -54,18 +55,12 @@ export function createNativeLifecycle(
         core.beginRecovery(slot, allowEmptyImport),
       readIdentity: async (slot) => {
         const identity = await core.readIdentity(slot);
-        return identity && retainedIOS
-          ? {
-              ...identity,
-              providerStoragePrefix:
-                identity.providerStoragePrefix ??
-                retainedIOS.keyIdStoragePrefix,
-            }
+        return identity && imports
+          ? imports.normalizeReference(identity)
           : identity;
       },
       installRetainedIdentity: (slot, identity) => {
-        if (!retainedIOS || config.provider !== "app-attest")
-          throw new FirstPartyClientError("invalid_request");
+        if (!imports) throw new FirstPartyClientError("invalid_request");
         return core.installRetainedIdentity(slot, identity);
       },
     },

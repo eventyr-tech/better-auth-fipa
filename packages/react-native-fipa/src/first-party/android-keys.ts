@@ -1,3 +1,23 @@
+import { digest, identifier } from "./identity.ts";
+import {
+  admissionBindingFields,
+  androidRegistrationFields,
+} from "./binding-fields.ts";
+import {
+  assertAdmissionBinding,
+  normalizeIssuer,
+  nativeOperation as call,
+  checkCancelled,
+  createAdmissionTransport,
+  successfulResponse as success,
+  signProof,
+  aliasesSchema,
+  parseResponse as parse,
+} from "./adapter-operations.ts";
+import {
+  androidIdentitySchema,
+  androidEnrollmentSchema,
+} from "./android-identity.ts";
 import { z } from "zod";
 import type { Spec as AndroidIntegrity } from "../NativeAndroidIntegrity.ts";
 import type {
@@ -7,14 +27,7 @@ import type {
 } from "./client.ts";
 import { FirstPartyClientError } from "./errors.ts";
 
-const digest = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-const identifier = z.string().min(1).max(256);
-const enrollment = z.strictObject({
-  keyChallengeToken: digest,
-  attestationChallenge: digest,
-  issuedAt: z.iso.datetime(),
-  expiresAt: z.iso.datetime(),
-});
+const enrollment = androidEnrollmentSchema;
 const challenge = z.object({
   challengeToken: digest,
   requestHash: digest,
@@ -54,21 +67,7 @@ export function createAndroidKeyPorts(
   options = { ...options };
   let issuer: string;
   try {
-    const url = new URL(options.issuer);
-    if (
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.protocol !== "https:" &&
-        !(
-          options.allowInsecureLoopback === true &&
-          url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-        ))
-    )
-      throw new Error();
-    issuer = url.href.replace(/\/+$/u, "");
+    issuer = normalizeIssuer(options.issuer, options.allowInsecureLoopback);
     identifier.parse(options.clientId);
     identifier.parse(options.applicationId);
     z.literal("production").parse(options.environment);
@@ -81,21 +80,7 @@ export function createAndroidKeyPorts(
   } catch {
     throw new FirstPartyClientError("invalid_configuration");
   }
-  const check = (signal: AbortSignal) => {
-    if (signal.aborted) throw new FirstPartyClientError("cancelled");
-  };
-  async function call<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation();
-    } catch {
-      throw new FirstPartyClientError("operation_failed");
-    }
-  }
-  function parse<T>(schema: z.ZodType<T>, value: unknown): T {
-    const parsed = schema.safeParse(value);
-    if (!parsed.success) throw new FirstPartyClientError("invalid_response");
-    return parsed.data;
-  }
+  const check = checkCancelled;
   function window(
     value: { issuedAt: string; expiresAt: string },
     registered = false,
@@ -120,10 +105,11 @@ export function createAndroidKeyPorts(
     )
       throw new FirstPartyClientError("invalid_state");
   }
-  async function available(identity: NativeIdentity) {
+  async function available(identity: NativeIdentity, signal?: AbortSignal) {
     sameKey(identity);
-    const existing = await call(() =>
-      native.integrity.inspectKey(identity.dpopAlias),
+    const existing = await call(
+      () => native.integrity.inspectKey(identity.dpopAlias),
+      signal,
     );
     if (existing !== identity.dpopJkt)
       throw new FirstPartyClientError("registration_recovery_required");
@@ -133,113 +119,40 @@ export function createAndroidKeyPorts(
     request,
   ) => {
     sameKey(identity);
-    return parse(
-      z
-        .string()
-        .max(16384)
-        .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
-      await call(() =>
-        native.integrity.signDpop(
-          identity.dpopAlias,
-          identity.dpopJkt,
-          request.url,
-          request.method,
-          request.accessToken ?? null,
-          request.nonce ?? null,
-        ),
-      ),
+    return signProof(
+      (...args) => native.integrity.signDpop(...args),
+      identity,
+      request,
     );
   };
-  async function post(
-    path: string,
-    body: unknown,
-    signal: AbortSignal,
-    identity?: NativeIdentity,
-  ) {
-    check(signal);
-    const url = `${issuer}${path}`;
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    };
-    if (identity) headers.DPoP = await proof(identity, { url, method: "POST" });
-    check(signal);
-    let response: Awaited<ReturnType<FirstPartyClientPorts["send"]>>;
-    try {
-      response = await native.send({
-        url,
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal,
-        maximumResponseBytes: 65536,
-      });
-    } catch {
-      check(signal);
-      throw new FirstPartyClientError("request_failed");
-    }
-    check(signal);
-    if (
-      response.url !== url ||
-      !Number.isInteger(response.status) ||
-      response.status < 200 ||
-      response.status >= 600 ||
-      (response.status >= 300 && response.status < 400) ||
-      new TextEncoder().encode(response.body).byteLength > 65536
-    )
-      throw new FirstPartyClientError("invalid_response");
-    let payload: unknown;
-    try {
-      payload = JSON.parse(response.body);
-    } catch {
-      throw new FirstPartyClientError("invalid_response");
-    }
-    return { status: response.status, body: payload };
-  }
-  function success(response: { status: number; body: unknown }) {
-    if (response.status !== 200)
-      throw new FirstPartyClientError("request_failed");
-    return response.body;
-  }
-  async function hash(value: unknown) {
+  const post = createAdmissionTransport(issuer, native.send, proof);
+  async function hash(value: unknown, signal: AbortSignal) {
     return parse(
       digest,
-      await call(() => native.integrity.sha256Utf8(JSON.stringify(value))),
+      await call(
+        () => native.integrity.sha256Utf8(JSON.stringify(value)),
+        signal,
+      ),
     );
   }
-  async function registrationHash(binding: NativeBinding, nonce: string) {
-    const bindingHash = await hash([
-      "better-auth-device-attestation/first-party-admission-binding/v1",
-      binding.profile,
-      binding.mode,
-      binding.issuer,
-      binding.clientId,
-      binding.provider,
-      binding.applicationId,
-      binding.environment,
-      binding.attemptId,
-      binding.codeChallenge,
-      binding.codeChallengeMethod,
-      binding.dpopJkt,
-      [...new Set(binding.scopes)].sort(),
-      [...new Set(binding.resources)].sort(),
-      null,
-      null,
-      null,
-    ]);
-    return hash([
-      "better-auth-device-attestation/android-registration/v1",
-      nonce,
-      bindingHash,
-    ]);
+  async function registrationHash(
+    binding: NativeBinding,
+    nonce: string,
+    signal: AbortSignal,
+  ) {
+    const bindingHash = await hash(admissionBindingFields(binding), signal);
+    return hash(androidRegistrationFields(nonce, bindingHash), signal);
   }
+
   async function play(requestHash: string, signal: AbortSignal) {
     check(signal);
-    const evidence = await call(() =>
-      native.integrity.standardIntegrity(
-        options.cloudProjectNumber,
-        requestHash,
-      ),
+    const evidence = await call(
+      () =>
+        native.integrity.standardIntegrity(
+          options.cloudProjectNumber,
+          requestHash,
+        ),
+      signal,
     );
     check(signal);
     return parse(token, evidence);
@@ -261,17 +174,17 @@ export function createAndroidKeyPorts(
     return receipt.grantToken;
   }
   return {
+    identitySchema: androidIdentitySchema,
     prepare: async (slot, context) => {
       const signal = context?.signal ?? new AbortController().signal;
       check(signal);
-      const aliases = z
-        .strictObject({ dpopAlias: identifier, providerScope: identifier })
-        .safeParse(await options.aliases(slot));
+      const aliases = aliasesSchema.safeParse(await options.aliases(slot));
       if (!aliases.success)
         throw new FirstPartyClientError("invalid_configuration");
       check(signal);
-      const existing = await call(() =>
-        native.integrity.inspectKey(aliases.data.dpopAlias),
+      const existing = await call(
+        () => native.integrity.inspectKey(aliases.data.dpopAlias),
+        signal,
       );
       check(signal);
       if (existing !== null) {
@@ -300,12 +213,14 @@ export function createAndroidKeyPorts(
       check(signal);
       const jkt = parse(
         digest,
-        await call(() =>
-          native.integrity.createKey(
-            aliases.data.dpopAlias,
-            pending.attestationChallenge,
-            options.securityLevel,
-          ),
+        await call(
+          () =>
+            native.integrity.createKey(
+              aliases.data.dpopAlias,
+              pending.attestationChallenge,
+              options.securityLevel,
+            ),
+          signal,
         ),
       );
       check(signal);
@@ -329,16 +244,14 @@ export function createAndroidKeyPorts(
     },
     admission: async (identity, binding, context) => {
       check(context.signal);
-      if (
-        binding.provider !== "android-hardware" ||
-        binding.dpopJkt !== identity.dpopJkt ||
-        binding.issuer !== issuer ||
-        binding.clientId !== options.clientId ||
-        binding.applicationId !== options.applicationId ||
-        binding.environment !== options.environment
-      )
-        throw new FirstPartyClientError("invalid_state");
-      await available(identity);
+      assertAdmissionBinding(binding, identity, {
+        issuer,
+        provider: "android-hardware",
+        clientId: options.clientId,
+        applicationId: options.applicationId,
+        environment: options.environment,
+      });
+      await available(identity, context.signal);
       const response = await post(
         "/first-party/attestation/challenge",
         { keyId: identity.providerKeyId, binding },
@@ -358,16 +271,19 @@ export function createAndroidKeyPorts(
         window(pending);
         const certificateChain = parse(
           chain,
-          await call(() =>
-            native.integrity.certificateChain(
-              identity.dpopAlias,
-              identity.dpopJkt,
-            ),
+          await call(
+            () =>
+              native.integrity.certificateChain(
+                identity.dpopAlias,
+                identity.dpopJkt,
+              ),
+            context.signal,
           ),
         );
         const requestHash = await registrationHash(
           binding,
           pending.attestationChallenge,
+          context.signal,
         );
         const integrityToken = await play(requestHash, context.signal);
         window(pending);

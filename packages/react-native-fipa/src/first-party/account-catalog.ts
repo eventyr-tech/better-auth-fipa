@@ -1,9 +1,6 @@
 import { z } from "zod";
 import type { AccountSlot, NativeIdentity } from "./client.ts";
-import {
-  retainedIOSIdentitySchema,
-  type RetainedIOSIdentity,
-} from "./ios-retained-keys.ts";
+import { importedIdentitySchema, type ImportedIdentity } from "./identity.ts";
 import { FirstPartyClientError } from "./errors.ts";
 import {
   createSessionCoordinator,
@@ -23,7 +20,7 @@ const catalogSchema = z.strictObject({
     .max(31)
     .optional(),
   importing: z
-    .strictObject({ slot: id, identity: retainedIOSIdentitySchema })
+    .strictObject({ slot: id, identity: importedIdentitySchema })
     .optional(),
   importedSlots: z.array(id).max(32).optional(),
 });
@@ -40,7 +37,7 @@ export function createAccountCatalog(options: {
   readIdentity(slot: string): Promise<NativeIdentity | null>;
   installRetainedIdentity(
     slot: string,
-    identity: RetainedIOSIdentity,
+    identity: ImportedIdentity,
   ): Promise<void>;
 }) {
   const coordinator = createSessionCoordinator(options.vault, {
@@ -148,8 +145,8 @@ export function createAccountCatalog(options: {
     return { record: cleaned, result };
   }
   return {
-    importRetained(input: RetainedIOSIdentity): Promise<AccountSlot> {
-      const parsed = retainedIOSIdentitySchema.safeParse(input);
+    importRetained(input: ImportedIdentity): Promise<AccountSlot> {
+      const parsed = importedIdentitySchema.safeParse(input);
       if (!parsed.success) throw new FirstPartyClientError("invalid_request");
       return run(true, async (stored, save) => {
         const record: Catalog = stored ?? {
