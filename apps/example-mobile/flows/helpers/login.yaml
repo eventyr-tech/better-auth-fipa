@@ -1,0 +1,16 @@
+appId: io.eventyr.attestationlab
+---
+- stopApp
+- launchApp:
+    clearState: false
+    permissions:
+      all: unset
+- runFlow: connect.yaml
+- scrollUntilVisible:
+    element:
+      id: add-account
+    direction: DOWN
+- tapOn:
+    id: add-account
+- runFlow: password.yaml
+- runFlow: protected-api.yaml

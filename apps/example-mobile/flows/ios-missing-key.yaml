@@ -1,0 +1,56 @@
+appId: io.eventyr.attestationlab
+---
+- runShell: node scripts/device-lab/screen.mjs wake
+- runFlow: helpers/login.yaml
+- runShell:
+    node scripts/device-lab/recovery-evidence.mjs before "${TEST_DATABASE_PATH}"
+    "${TEST_EVIDENCE_PATH}" "${TEST_SUBJECT}"
+- scrollUntilVisible:
+    element:
+      id: lose-dpop-key
+    direction: UP
+- tapOn:
+    id: lose-dpop-key
+- scrollUntilVisible:
+    element:
+      id: auth-status
+    direction: DOWN
+- assertVisible: "Selected DPoP key deleted.*"
+- stopApp
+- launchApp:
+    clearState: false
+    permissions:
+      all: unset
+- runFlow: helpers/connect.yaml
+- scrollUntilVisible:
+    element:
+      id: "account-${TEST_SUBJECT}-saved"
+    direction: DOWN
+- tapOn:
+    id: "account-${TEST_SUBJECT}-saved"
+- scrollUntilVisible:
+    element:
+      id: restore-session
+    direction: DOWN
+- tapOn:
+    id: restore-session
+- scrollUntilVisible:
+    element:
+      id: auth-status
+    direction: DOWN
+- assertVisible: "Authentication: operation_failed"
+- runShell:
+    node scripts/device-lab/recovery-evidence.mjs failed-restore
+    "${TEST_DATABASE_PATH}" "${TEST_EVIDENCE_PATH}" "${TEST_SUBJECT}"
+- scrollUntilVisible:
+    element:
+      id: recover-account
+    direction: UP
+- tapOn:
+    id: recover-account
+- tapOn: "Recover"
+- runFlow: helpers/password.yaml
+- runFlow: helpers/protected-api.yaml
+- runShell:
+    node scripts/device-lab/recovery-evidence.mjs recovered
+    "${TEST_DATABASE_PATH}" "${TEST_EVIDENCE_PATH}" "${TEST_SUBJECT}"

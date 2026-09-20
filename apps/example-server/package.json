@@ -1,0 +1,31 @@
+{
+  "name": "@device-attestation/example-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@better-auth/oauth-provider": "1.7.5",
+    "@eventyr-tech/better-auth-fipa": "workspace:*",
+    "better-auth": "1.7.5",
+    "google-auth-library": "11.1.0",
+    "jose": "6.2.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@eventyr-tech/react-native-fipa": "workspace:*",
+    "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "eslint": "^9.39.2",
+    "tsx": "^4.21.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.1.4"
+  }
+}

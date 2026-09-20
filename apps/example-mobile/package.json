@@ -1,0 +1,29 @@
+{
+  "name": "@device-attestation/example-mobile",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "prebuild:ios": "expo prebuild --platform ios --no-install",
+    "typecheck": "tsc --noEmit",
+    "build": "expo export --platform all --output-dir dist",
+    "prebuild:android": "expo prebuild --platform android --no-install"
+  },
+  "dependencies": {
+    "@eventyr-tech/react-native-fipa": "workspace:*",
+    "expo": "57.0.6",
+    "expo-build-properties": "~57.0.21",
+    "expo-dev-client": "57.0.6",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-dpop": "1.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.0",
+    "typescript": "5.9.3"
+  }
+}

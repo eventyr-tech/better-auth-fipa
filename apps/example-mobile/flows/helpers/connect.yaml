@@ -1,0 +1,23 @@
+appId: io.eventyr.attestationlab
+---
+- tapOn:
+    id: server-url
+- eraseText: 300
+- inputText: "${TEST_SERVER_URL}"
+- hideKeyboard
+- tapOn:
+    id: application-id
+- eraseText: 200
+- inputText: "${TEST_APPLICATION_ID}"
+- hideKeyboard
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          id: cloud-project-number
+      - eraseText: 100
+      - inputText: "${TEST_CLOUD_PROJECT_NUMBER}"
+      - hideKeyboard
+- tapOn:
+    id: connect
