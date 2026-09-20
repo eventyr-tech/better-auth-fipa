@@ -1,3 +1,8 @@
+import {
+  isolatedAuthHeaders,
+  isolatedAuthContext,
+  captureSessionCreation,
+} from "./auth-isolation.js";
 import type { GenericEndpointContext } from "@better-auth/core";
 import { APIError, dispatchAuthEndpoint, isAPIError } from "better-auth/api";
 import { z } from "zod";
@@ -35,9 +40,7 @@ export async function sendEmailOTP(
         "sendVerificationOTP",
         "/email-otp/send-verification-otp",
       );
-  const headers = new Headers(ctx.headers);
-  for (const name of ["cookie", "authorization", "dpop"]) headers.delete(name);
-  headers.set("content-type", "application/json");
+  const headers = isolatedAuthHeaders(ctx.headers);
   const body = { email: parsed.data, type: "sign-in" };
   // A host hook can create sessions even on a delivery endpoint. None may be
   // retained by this non-authenticating operation, including on failure.
@@ -48,19 +51,10 @@ export async function sendEmailOTP(
   > => {
     try {
       const response = await dispatchAuthEndpoint(endpoint, {
-        context: {
-          ...ctx.context,
-          session: null,
-          newSession: null,
-          internalAdapter: {
-            ...original,
-            createSession: async (...args) => {
-              const session = await original.createSession(...args);
-              if (session) created.add(session.token);
-              return session;
-            },
-          },
-        },
+        context: isolatedAuthContext(
+          ctx.context,
+          captureSessionCreation(original, (token) => created.add(token)),
+        ),
         method: "POST",
         headers,
         body,

@@ -1,3 +1,8 @@
+import {
+  isolatedAuthHeaders,
+  isolatedAuthContext,
+  captureSessionCreation,
+} from "./auth-isolation.js";
 import type { GenericEndpointContext } from "@better-auth/core";
 import { APIError, dispatchAuthEndpoint, isAPIError } from "better-auth/api";
 import { z } from "zod";
@@ -30,9 +35,7 @@ export async function authenticateWithMethod<Method extends "pwd" | "otp">(
 ): Promise<AuthenticationMethodResult<Method>> {
   const created = new Map<string, string>();
   const original = ctx.context.internalAdapter;
-  const headers = new Headers(ctx.headers);
-  for (const name of ["cookie", "authorization", "dpop"]) headers.delete(name);
-  headers.set("content-type", "application/json");
+  const headers = isolatedAuthHeaders(ctx.headers);
   const body = input.body;
   const authenticate = async (): Promise<
     AuthenticationMethodResult<Method>
@@ -46,19 +49,12 @@ export async function authenticateWithMethod<Method extends "pwd" | "otp">(
           : null;
       const before = prior ? await userSecurityHash(ctx, prior.user.id) : null;
       const result = await dispatchAuthEndpoint(input.endpoint, {
-        context: {
-          ...ctx.context,
-          session: null,
-          newSession: null,
-          internalAdapter: {
-            ...original,
-            createSession: async (...args) => {
-              const session = await original.createSession(...args);
-              if (session) created.set(session.token, session.userId);
-              return session;
-            },
-          },
-        },
+        context: isolatedAuthContext(
+          ctx.context,
+          captureSessionCreation(original, (token, userId) =>
+            created.set(token, userId),
+          ),
+        ),
         method: "POST",
         headers,
         body,

@@ -1,3 +1,8 @@
+import {
+  isolatedAuthHeaders,
+  isolatedAuthContext,
+  captureSessionCreation,
+} from "../auth-isolation.js";
 import { randomBytes } from "node:crypto";
 import type { GenericEndpointContext } from "@better-auth/core";
 import { runWithEndpointContext } from "@better-auth/core/context";
@@ -43,9 +48,7 @@ export async function completeLegacyProfile(
   )
     throw invalid();
 
-  const headers = new Headers(ctx.headers);
-  for (const name of ["cookie", "authorization", "dpop"]) headers.delete(name);
-  headers.set("content-type", "application/json");
+  const headers = isolatedAuthHeaders(ctx.headers);
   let profileUpdated = false;
   const expiresAt = new Date(
     Math.min(session.expiresAt.getTime(), Date.now() + 60_000),
@@ -53,55 +56,56 @@ export async function completeLegacyProfile(
   const context: GenericEndpointContext["context"] & {
     responseHeaders: Headers;
   } = {
-    ...ctx.context,
-    session: null,
-    newSession: null,
+    ...isolatedAuthContext(ctx.context),
     responseHeaders: new Headers(),
-    internalAdapter: {
-      ...original,
-      updateUser: async <T extends Record<string, unknown>>(
-        ...[id, data]: Parameters<typeof original.updateUser>
-      ) => {
-        if (id !== userId) throw invalid();
-        const updated = await original.updateUser<T>(id, data);
-        if (updated && Object.hasOwn(data, "name")) profileUpdated = true;
-        return updated;
-      },
-      createSession: async (
-        ...args: Parameters<typeof original.createSession>
-      ) => {
-        if (args[0] !== userId) throw invalid();
-        // These are temporary sessions for this verified subject only. Choose
-        // and track every token BEFORE BA writes SQL/cache, including the
-        // password method and hooks, so a partial creation failure is cleanable.
-        const token = randomBytes(32).toString("base64url");
-        pendingSessions.add(token);
-        const created = await original.createSession(
-          userId,
-          args[1],
-          {
-            ...args[2],
-            token,
+    internalAdapter: captureSessionCreation(
+      {
+        ...original,
+        updateUser: async <T extends Record<string, unknown>>(
+          ...[id, data]: Parameters<typeof original.updateUser>
+        ) => {
+          if (id !== userId) throw invalid();
+          const updated = await original.updateUser<T>(id, data);
+          if (updated && Object.hasOwn(data, "name")) profileUpdated = true;
+          return updated;
+        },
+        createSession: async (
+          ...args: Parameters<typeof original.createSession>
+        ) => {
+          if (args[0] !== userId) throw invalid();
+          // These are temporary sessions for this verified subject only. Choose
+          // and track every token BEFORE BA writes SQL/cache, including the
+          // password method and hooks, so a partial creation failure is cleanable.
+          const token = randomBytes(32).toString("base64url");
+          pendingSessions.add(token);
+          const created = await original.createSession(
             userId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            expiresAt,
-          },
-          true,
-          args[4],
-        );
-        if (created) pendingSessions.add(created.token);
-        if (
-          !created ||
-          created.token !== token ||
-          created.userId !== userId ||
-          created.expiresAt > expiresAt ||
-          created.expiresAt <= new Date()
-        )
-          throw invalid();
-        return created;
+            args[1],
+            {
+              ...args[2],
+              token,
+              userId,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              expiresAt,
+            },
+            true,
+            args[4],
+          );
+          if (created) pendingSessions.add(created.token);
+          if (
+            !created ||
+            created.token !== token ||
+            created.userId !== userId ||
+            created.expiresAt > expiresAt ||
+            created.expiresAt <= new Date()
+          )
+            throw invalid();
+          return created;
+        },
       },
-    },
+      (token) => pendingSessions.add(token),
+    ),
   };
   try {
     const temporary = await runWithEndpointContext({ headers, context }, () =>
@@ -119,9 +123,7 @@ export async function completeLegacyProfile(
     ) => {
       const result = await dispatchAuthEndpoint(endpoint, {
         context: {
-          ...context,
-          session: null,
-          newSession: null,
+          ...isolatedAuthContext(context),
           responseHeaders: new Headers(),
         },
         headers: new Headers(headers),
