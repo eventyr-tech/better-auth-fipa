@@ -92,7 +92,8 @@
     }
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "alpha"
   },
   "dependencies": {
     "zod": "4.4.3"

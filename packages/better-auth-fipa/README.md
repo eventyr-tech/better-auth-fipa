@@ -397,13 +397,45 @@ pnpm test:postgres
 pnpm package:check
 ```
 
-Plugin integration tests use Better Auth's published `getTestInstance()` helper.
-The ordinary suite runs the shared adapter contract against its default
-in-memory SQLite database on the supported Node.js runtime. The PostgreSQL CI
-lane runs the same adapter contract against Better Auth's standard PostgreSQL
-test service. SQLite/Kysely and PostgreSQL/Kysely are the currently verified
-database combinations; other adapters remain unverified until they pass the same
-contract.
+Plugin integration tests use isolated SQLite databases and PostgreSQL schemas.
+The PostgreSQL CI lanes run the shared contracts through Kysely and Drizzle,
+including generated schema migrations and an independently installed package
+consumer. Other adapters remain unverified until they pass the same contracts.
+
+### Drizzle/PostgreSQL compatibility
+
+The supported Drizzle baseline is Better Auth **1.7.5**, Drizzle ORM **0.45.2**,
+and `@better-auth/drizzle-adapter@1.7.5` **with the included compatibility
+patch**. Unpatched 1.7.5 does not preserve guarded updates under PostgreSQL
+contention. The patch applies the runtime fix from
+[Better Auth PR #11331](https://github.com/better-auth/better-auth/pull/11331)
+(commit `d14b9fa8cd5d16563f2a47cac05567d6501446c0`) to both adapter entry
+points. It does not change this plugin's authentication behavior or add an
+adapter shim.
+
+Installing this package does **not** automatically patch your dependencies. In
+the server application's workspace root, copy the supplied patch:
+
+```sh
+mkdir -p patches
+cp node_modules/@eventyr-tech/better-auth-fipa/docs/@better-auth__drizzle-adapter@1.7.5.patch patches/
+```
+
+Merge this entry into `pnpm-workspace.yaml`, preserving existing patches:
+
+```yaml
+patchedDependencies:
+  "@better-auth/drizzle-adapter@1.7.5": patches/@better-auth__drizzle-adapter@1.7.5.patch
+```
+
+Run `pnpm install` and commit the patch, workspace configuration, and lockfile.
+Keep Better Auth and its adapter pinned to 1.7.5 for this baseline; newer
+versions are not implicitly covered by this patch. CI and deployments should use
+`pnpm install --frozen-lockfile`. In a monorepo, copy from the server
+workspace's `node_modules` if the package is not installed at the root. Remove
+the patch only after upgrading to an upstream version containing the fix and
+rerunning the PostgreSQL contracts. SQLite/Kysely and PostgreSQL/Kysely do not
+need this patch.
 
 See [docs/design.md](docs/design.md) for the authentication architecture,
 platform trust distinctions, security invariants and extension boundaries.
