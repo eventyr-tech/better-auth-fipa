@@ -3,10 +3,6 @@ package com.deviceattestation
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
-import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 
 /**
  * Foreground protocol transport. Android enrollment must use the challenge-bound key module; the
@@ -16,45 +12,19 @@ internal class DeviceAttestationFirstPartyTransport(context: ReactApplicationCon
     NativeFirstPartyTransportSpec(context) {
     private val client = FirstPartyHTTPClient()
     private val keys = AndroidAttestedKey(context.applicationContext)
-    private val worker = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(64))
-    private val pending = ConcurrentHashMap<Promise, Boolean>()
-    @Volatile private var invalidated = false
+    private val operations =
+        BridgeOperations(
+            1,
+            64,
+            { error -> (error as? NativeFailure)?.code ?: "http_unavailable" },
+            "The native operation could not be completed.",
+        )
 
-    private fun reject(promise: Promise, error: Throwable?) {
-        if (pending.remove(promise) != null)
-            promise.reject(
-                (error as? NativeFailure)?.code ?: "http_unavailable",
-                "The native operation could not be completed.",
-            )
-    }
-
-    private fun resolve(promise: Promise, value: Any?) {
-        if (pending.remove(promise) != null) promise.resolve(value)
-    }
-
-    private fun execute(promise: Promise, block: () -> Any?) {
-        pending[promise] = true
-        if (invalidated) {
-            reject(promise, null)
-            return
-        }
-        try {
-            worker.execute {
-                try {
-                    resolve(promise, block())
-                } catch (error: Exception) {
-                    reject(promise, error)
-                }
-            }
-        } catch (error: Exception) {
-            reject(promise, error)
-        }
-    }
-
-    override fun randomToken(promise: Promise) = execute(promise) { FirstPartyCrypto.randomToken() }
+    override fun randomToken(promise: Promise) =
+        operations.execute(promise) { FirstPartyCrypto.randomToken() }
 
     override fun transaction(promise: Promise) =
-        execute(promise) {
+        operations.execute(promise) {
             val verifier = FirstPartyCrypto.randomToken()
             Arguments.createMap().apply {
                 putString("id", FirstPartyCrypto.randomToken())
@@ -64,13 +34,13 @@ internal class DeviceAttestationFirstPartyTransport(context: ReactApplicationCon
         }
 
     override fun prepareDpop(alias: String, promise: Promise) =
-        execute(promise) { throw NativeFailure("key_enrollment_required") }
+        operations.execute(promise) { throw NativeFailure("key_enrollment_required") }
 
     override fun inspectDpop(alias: String, promise: Promise) =
-        execute(promise) { keys.inspect(alias) ?: throw NativeFailure("key_missing") }
+        operations.execute(promise) { keys.inspect(alias) ?: throw NativeFailure("key_missing") }
 
     override fun removeDpop(alias: String, expectedThumbprint: String, promise: Promise) =
-        execute(promise) {
+        operations.execute(promise) {
             keys.remove(alias, expectedThumbprint)
             null
         }
@@ -83,7 +53,10 @@ internal class DeviceAttestationFirstPartyTransport(context: ReactApplicationCon
         accessToken: String?,
         nonce: String?,
         promise: Promise,
-    ) = execute(promise) { keys.sign(alias, expectedThumbprint, url, method, accessToken, nonce) }
+    ) =
+        operations.execute(promise) {
+            keys.sign(alias, expectedThumbprint, url, method, accessToken, nonce)
+        }
 
     override fun send(
         requestId: String,
@@ -96,11 +69,7 @@ internal class DeviceAttestationFirstPartyTransport(context: ReactApplicationCon
         allowInsecureLoopback: Boolean,
         promise: Promise,
     ) {
-        pending[promise] = true
-        if (invalidated) {
-            reject(promise, null)
-            return
-        }
+        if (!operations.begin(promise)) return
         client
             .send(
                 requestId,
@@ -113,9 +82,9 @@ internal class DeviceAttestationFirstPartyTransport(context: ReactApplicationCon
                 allowInsecureLoopback,
             )
             .whenComplete { response, error ->
-                if (error != null) reject(promise, error)
+                if (error != null) operations.reject(promise, error)
                 else
-                    resolve(
+                    operations.resolve(
                         promise,
                         Arguments.createMap().apply {
                             putString("url", response.url)
@@ -140,14 +109,15 @@ internal class DeviceAttestationFirstPartyTransport(context: ReactApplicationCon
         allowInsecureLoopback: Boolean,
         promise: Promise,
     ) {
-        pending[promise] = true
+        if (!operations.begin(promise)) return
         AndroidFirstPartyBrowser.open(
             this,
             reactApplicationContext,
             BrowserRequest(requestId, url, redirectUri, timeoutMilliseconds, allowInsecureLoopback),
-            { invalidated },
+            { operations.invalidated },
         ) { callback, error ->
-            if (error != null) reject(promise, error) else resolve(promise, callback)
+            if (error != null) operations.reject(promise, error)
+            else operations.resolve(promise, callback)
         }
     }
 
@@ -156,11 +126,10 @@ internal class DeviceAttestationFirstPartyTransport(context: ReactApplicationCon
     }
 
     override fun invalidate() {
-        invalidated = true
-        AndroidFirstPartyBrowser.invalidate(this)
-        client.close()
-        worker.shutdownNow()
-        pending.keys.forEach { reject(it, null) }
+        operations.invalidate {
+            AndroidFirstPartyBrowser.invalidate(this)
+            client.close()
+        }
         super.invalidate()
     }
 }
