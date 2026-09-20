@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import type { GenericEndpointContext } from "@better-auth/core";
 import { deriveDpopJkt } from "@better-auth/core/oauth2";
 import { createAuthEndpoint } from "better-auth/api";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { decodeBase64Strict } from "./encoding/base64.js";
@@ -286,7 +286,8 @@ async function fixture(testWith: "sqlite" | "postgres") {
 for (const database of ["sqlite", "postgres"] as const) {
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`Native admission (${database})`, () => {
     it("reuses registration but separates native assertion bytes and atomically consumes admission", async () => {

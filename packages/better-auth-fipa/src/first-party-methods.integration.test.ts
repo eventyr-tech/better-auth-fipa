@@ -5,7 +5,7 @@ import {
 } from "better-auth/api";
 import { emailOTP, twoFactor } from "better-auth/plugins";
 import type { BetterAuthPlugin } from "better-auth";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { authenticateWithPassword } from "./first-party/password-method.js";
@@ -274,7 +274,8 @@ async function fixture(
 for (const database of ["sqlite", "postgres"] as const) {
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`First-party email OTP method (${database})`, () => {
     it("uses configured delivery and consuming authentication, suppresses ambient credentials and cleans sessions", async () => {
@@ -428,7 +429,8 @@ for (const database of ["sqlite", "postgres"] as const) {
   });
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`First-party password method (${database})`, () => {
     it("invokes configured hooks, accepts the verified user, and removes temporary sessions", async () => {

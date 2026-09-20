@@ -15,7 +15,7 @@ import {
   createAuthEndpoint,
   createAuthMiddleware,
 } from "better-auth/api";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
@@ -35,7 +35,7 @@ const sqliteAvailable = Number(process.versions.node.split(".")[0]) >= 22;
 for (const database of ["sqlite", "postgres"] as const) {
   describe.runIf(
     database === "sqlite"
-      ? sqliteAvailable
+      ? sqliteAvailable && process.env.TEST_POSTGRES !== "true"
       : process.env.TEST_POSTGRES === "true",
   )(`First-party issuance feasibility (${database})`, () => {
     it("reserves a challenge proof once across independent database replay stores", async () => {

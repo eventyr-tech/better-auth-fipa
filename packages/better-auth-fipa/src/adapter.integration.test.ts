@@ -1,5 +1,5 @@
 import type { StoredAuthorizationQuery } from "@better-auth/oauth-provider";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { describe, expect, it } from "vitest";
 
 import { deviceAttestationClient } from "./client.js";
@@ -20,7 +20,7 @@ const UINT32_MAX = 0xffff_ffff;
 const NODE_SQLITE_AVAILABLE = supportsBuiltInSqlite();
 const POSTGRES_ENABLED = process.env.TEST_POSTGRES === "true";
 
-describe.runIf(NODE_SQLITE_AVAILABLE)(
+describe.runIf(NODE_SQLITE_AVAILABLE && !POSTGRES_ENABLED)(
   "Better Auth SQLite plugin contract",
   () => {
     it("preserves the device-attestation lifecycle and atomic invariants", async () => {

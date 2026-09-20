@@ -6,7 +6,7 @@ import {
   createAuthMiddleware,
 } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -166,7 +166,8 @@ async function fixture(testWith: "sqlite" | "postgres") {
 for (const database of ["sqlite", "postgres"] as const) {
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`First-party email delivery (${database})`, () => {
     it("deduplicates completed operations and stores only keyed recipient/operation hashes", async () => {

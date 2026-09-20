@@ -20,7 +20,7 @@ import {
   createAuthMiddleware,
 } from "better-auth/api";
 import { emailOTP, twoFactor, jwt as jwtPlugin } from "better-auth/plugins";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createDeviceAttestation } from "./plugin.js";
@@ -665,7 +665,8 @@ async function fixture(
 for (const database of ["sqlite", "postgres"] as const)
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`Native continuation HTTP (${database})`, () => {
     it("preserves native proof requirements and assurance when legacy compatibility is enabled", async () => {

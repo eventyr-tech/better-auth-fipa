@@ -7,7 +7,7 @@ import {
 } from "./first-party/android-maintenance.js";
 import { requireNativeAccess } from "./first-party/token-lifecycle.js";
 import { createHash, randomUUID, sign } from "node:crypto";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import type { BetterAuthPlugin } from "better-auth";
 import { oauthProvider, type OAuthOptions } from "@better-auth/oauth-provider";
 import { describe, expect, it } from "vitest";
@@ -387,7 +387,8 @@ async function fixture(database: "sqlite" | "postgres", trustSeconds = 3600) {
 for (const database of ["sqlite", "postgres"] as const) {
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`Android native admission (${database})`, () => {
     it("registers the exact certified proof key and carries distinct evidence into native password login", async () => {

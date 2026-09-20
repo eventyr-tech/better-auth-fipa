@@ -12,7 +12,7 @@ import {
 } from "@better-auth/oauth-provider";
 import type { BetterAuthPlugin } from "better-auth";
 import { createAuthEndpoint } from "better-auth/api";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { deviceAttestationSchema } from "./schema.js";
@@ -318,7 +318,8 @@ async function fixture(
 for (const database of ["sqlite", "postgres"] as const) {
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`First-party authorization state (${database})`, () => {
     it("binds an Android certified-key record and actual token family without Apple fields", async () => {

@@ -31,7 +31,7 @@ import {
   revokeNativeFamily,
   type NativeTokenOptions,
 } from "./first-party/token-lifecycle.js";
-import { getTestInstance } from "better-auth/test";
+import { getTestInstance } from "./fixtures/auth-instance.js";
 import { describe, expect, it, vi } from "vitest";
 import { withFirstPartyTransaction } from "./first-party/transaction.js";
 import { z } from "zod";
@@ -847,7 +847,8 @@ async function fixture(
 for (const database of ["sqlite", "postgres"] as const)
   describe.runIf(
     database === "sqlite"
-      ? Number(process.versions.node.split(".")[0]) >= 22
+      ? process.env.TEST_POSTGRES !== "true" &&
+          Number(process.versions.node.split(".")[0]) >= 22
       : process.env.TEST_POSTGRES === "true",
   )(`legacy continuation boundary (${database})`, () => {
     const codeFields = (code: string) => ({
