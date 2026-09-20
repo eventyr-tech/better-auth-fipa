@@ -24,12 +24,12 @@ bypass or a promise of native MFA support.
 ## Installation
 
 ```sh
-pnpm add --save-exact @eventyr-tech/react-native-fipa@0.1.0-alpha.0 react-native-dpop@1.0.0
+pnpm add --save-exact @eventyr-tech/react-native-fipa@alpha react-native-dpop@1.0.0
 ```
 
-This release pairs with `@eventyr-tech/better-auth-fipa@0.1.0-alpha.3` on the
-server. Drizzle/PostgreSQL servers also require the dependency patch documented
-in the server package's README; no such patch is needed in the mobile app.
+Use this client with `@eventyr-tech/better-auth-fipa` on the server.
+Drizzle/PostgreSQL servers also require the dependency patch documented in the
+server package's README; no such patch is needed in the mobile app.
 
 Install iOS pods after adding the package. React Native 0.86 and React 19.2 are
 the initial integration targets. Expo applications need a development build or

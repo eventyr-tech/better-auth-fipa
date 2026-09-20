@@ -20,8 +20,7 @@ the existing protocol.
 > [!WARNING] These packages are alpha software. APIs and database schemas may
 > change before the first stable release.
 
-The initial compatible alpha pair is server `0.1.0-alpha.3` and React Native
-client `0.1.0-alpha.0`. Drizzle/PostgreSQL consumers must apply the
+Drizzle/PostgreSQL consumers must apply the
 [documented Better Auth 1.7.5 compatibility patch](packages/better-auth-fipa/README.md#drizzlepostgresql-compatibility).
 
 | Workspace                                                   | Purpose                                                                                                     |

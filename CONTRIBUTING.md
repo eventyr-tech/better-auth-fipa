@@ -97,11 +97,10 @@ issues, logs, or pull requests.
 
 ## Publishing the alpha pair
 
-The initial releases under the new names are server
-`@eventyr-tech/better-auth-fipa@0.1.0-alpha.3` and client
-`@eventyr-tech/react-native-fipa@0.1.0-alpha.0`. They are a tested pair; their
-version numbers do not need to match. Both manifests default to public access
-and the `alpha` dist-tag. Do not promote these releases to `latest`.
+The server and React Native package manifests are the source of truth for
+release versions. Validate and publish them as a compatible pair. Both manifests
+default to public access and the `alpha` dist-tag. Do not promote alpha releases
+to `latest`.
 
 Publish only after the PR is reviewed and merged, from a clean checkout of the
 exact main commit whose Node 22/24, PostgreSQL (Kysely and patched Drizzle),
