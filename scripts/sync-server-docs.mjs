@@ -14,3 +14,17 @@ cpSync(
     new URL("../packages/better-auth-fipa/docs/design.md", import.meta.url),
   ),
 );
+cpSync(
+  fileURLToPath(
+    new URL(
+      "../patches/@better-auth__drizzle-adapter@1.7.5.patch",
+      import.meta.url,
+    ),
+  ),
+  fileURLToPath(
+    new URL(
+      "../packages/better-auth-fipa/docs/@better-auth__drizzle-adapter@1.7.5.patch",
+      import.meta.url,
+    ),
+  ),
+);

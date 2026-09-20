@@ -134,9 +134,10 @@ async function exerciseAdapterContract(
     expect.fail("Expected registration to persist a credential.");
   }
   const storedCategory: unknown = credential.validationCategory;
-  expect(storedCategory).toBe(
-    testWith === "postgres" ? String(UINT32_MAX) : UINT32_MAX,
-  );
+  // Kysely/pg returns int8 strings; Drizzle's generated number-mode bigint
+  // returns numbers. The contract is exact UInt32 preservation, not one
+  // driver's representation.
+  expect(Number(storedCategory)).toBe(UINT32_MAX);
   await context.adapter.update({
     model: "deviceAttestationCredential",
     where: [{ field: "id", value: credential.id }],

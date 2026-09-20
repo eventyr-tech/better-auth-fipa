@@ -1,6 +1,6 @@
 {
   "name": "@eventyr-tech/better-auth-fipa",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.0",
   "description": "Attested first-party authentication for native iOS and Android apps, powered by Better Auth.",
   "type": "module",
   "sideEffects": [
@@ -55,7 +55,8 @@
     }
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "alpha"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/sync-server-docs.mjs",
@@ -68,6 +69,7 @@
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:postgres": "vitest run --config vitest.config.postgres.ts",
+    "test:drizzle": "vitest run --config vitest.config.drizzle.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
@@ -80,12 +82,15 @@
     }
   },
   "devDependencies": {
+    "auth": "1.7.5",
+    "drizzle-orm": "0.45.2",
+    "drizzle-kit": "0.31.10",
     "@arethetypeswrong/cli": "^0.18.5",
     "@better-auth/oauth-provider": "1.7.5",
     "@eslint/js": "^9.39.2",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.20.0",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "4.1.11",
     "better-auth": "1.7.5",
     "eslint": "^9.39.2",
     "kysely": "0.28.17",
@@ -94,7 +99,7 @@
     "publint": "^0.3.21",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@better-auth/core": "1.7.5",

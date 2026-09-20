@@ -11,6 +11,7 @@ export default defineConfig({
     testTimeout: 30_000,
     include: [
       "src/adapter.integration.test.ts",
+      "src/consumer-compatibility.integration.test.ts",
       "src/first-party-feasibility.integration.test.ts",
       "src/first-party-state.integration.test.ts",
       "src/first-party-admission.integration.test.ts",

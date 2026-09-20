@@ -20,6 +20,9 @@ the existing protocol.
 > [!WARNING] These packages are alpha software. APIs and database schemas may
 > change before the first stable release.
 
+Drizzle/PostgreSQL consumers must apply the
+[documented Better Auth 1.7.5 compatibility patch](packages/better-auth-fipa/README.md#drizzlepostgresql-compatibility).
+
 | Workspace                                                   | Purpose                                                                                                     |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | [Server plugin](packages/better-auth-fipa/README.md)        | `@eventyr-tech/better-auth-fipa` package; verification, credential lifecycle, grants, and OAuth integration |
