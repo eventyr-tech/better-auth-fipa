@@ -53,8 +53,8 @@ pending continuations remain usable. This option accepts no target ID and is not
 accepted by the credential-retirement endpoint.
 
 See the workspace reference server for executable composition and the bundled
-[first-party design](docs/first-party-auth-profile.md) for the full contract.
-The entry accepts the native protocol by default. The explicit
+[authentication architecture](docs/design.md) for protocol and lifecycle
+responsibilities. The entry accepts the native protocol by default. The explicit
 `legacyCompatibility: { clients: [...] }` option adds legacy JSON handling at
 the same challenge endpoint, using shared password, OTP and profile-setup
 methods. It also enables legacy code exchange and refresh with separate protocol
@@ -405,10 +405,8 @@ test service. SQLite/Kysely and PostgreSQL/Kysely are the currently verified
 database combinations; other adapters remain unverified until they pass the same
 contract.
 
-See [docs/design.md](docs/design.md) for the architecture, security invariants,
-protocol rationale, and release criteria. The proposed Android protocol and
-implementation plan are in
-[docs/android-attestation-design.md](docs/android-attestation-design.md).
+See [docs/design.md](docs/design.md) for the authentication architecture,
+platform trust distinctions, security invariants and extension boundaries.
 
 ## Security
 

@@ -64,8 +64,7 @@ confirmed account IDs and assurance returned by the protected example API.
 `pnpm verify:ios-package` installs an isolated tarball, typechecks this public
 API consumer, bundles it with Metro, and checks autolinking, Codegen and
 unsigned device compilation. It requires macOS/Xcode and CocoaPods, but no
-signing keys. It does not run the signed-device sequence above or prove an
-Eventyr upgrade.
+signing keys. It does not run the signed-device sequence above.
 
 There is no simulator attestation or software-key fallback. Android is available
 in the local alpha through the same entry, with the acceptance limits below.

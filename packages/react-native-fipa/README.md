@@ -247,7 +247,7 @@ pnpm test:ios
 
 The TypeScript integration suite exercises the actual Better Auth plugin with
 synthetic native evidence; Apple's cryptographic verification remains covered by
-the server's existing fixtures. Swift tests cover identifier storage, Eventyr
+the server's existing fixtures. Swift tests cover identifier storage, existing
 alias compatibility, and vault concurrency/recovery with an injected atomic
 store. Native transport tests use real loopback sockets, and DPoP encoding tests
 use ephemeral software keys. They do not verify physical Keychain lock/restore

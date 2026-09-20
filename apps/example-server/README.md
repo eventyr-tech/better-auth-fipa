@@ -70,9 +70,7 @@ sender and run both methods through durable restart, refresh and logout.
 The mobile app renders the server's method list, collects the email/code, and
 offers explicit resend. Existing MFA remains a browser step. Better Auth may
 remove an unverified account's old password when OTP first proves mailbox
-ownership; the example preserves this behavior. Account-security revocation
-across native token families remains an acceptance gate in the design, so this
-alpha example is not a production migration certificate.
+ownership; the example preserves this behavior.
 
 `/login` is a minimal same-origin password page for the system-browser handoff.
 It uses a fixed completion target and never follows an arbitrary `callbackURL`.
@@ -83,9 +81,6 @@ and the library's integration tests cover the MFA handoff independently.
 The default iOS executable uses Apple's real verifier. Its integration test
 replaces only platform evidence and exercises real SQLite, Better Auth password
 handling, PKCE, DPoP and issuance. This does not prove hardware operation.
-Generic legacy production migration and the remaining design/release gates are
-still pending; this example does not authorize upgrading Eventyr's production
-server.
 
 ## Android device-test server
 

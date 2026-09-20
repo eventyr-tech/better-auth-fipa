@@ -22,7 +22,7 @@ Create a private env file (outside the repository, mode 600):
 ```dotenv
 TEST_SERVER_URL=https://your-lab-server
 TEST_APPLICATION_ID=io.eventyr.attestationlab
-TEST_CLOUD_PROJECT_NUMBER=991373488079
+TEST_CLOUD_PROJECT_NUMBER=YOUR_GOOGLE_CLOUD_PROJECT_NUMBER
 TEST_EMAIL=your-test-account
 TEST_PASSWORD=your-test-password
 TEST_SUBJECT=your-test-account-subject-id
@@ -62,9 +62,10 @@ helpers. The generated flow is under
 `.artifacts/device-screen/android-lifecycle.yaml`.
 
 Reports include JUnit, HTML and failure captures. Treat local reports as
-private; captures may show test account data. UI assertions do not replace the
-existing server-side refresh/revocation checks. Their automated integration is
-unfinished.
+private; captures may show test account data. UI assertions do not independently
+verify server-side refresh or revocation. Inspect the corresponding server state
+when evaluating those cases. The selective iOS recovery flow includes its own
+server-state assertions.
 
 ## Android device setup
 
@@ -79,21 +80,6 @@ for an already-unlocked run. ADB cannot bypass a secure lock. A secure lock may
 still require manual unlock after reboot or accidental locking. Disabling screen
 lock can invalidate credential-protected keys, so configure the test phone
 before provisioning test credentials. Do not unlock the bootloader or root it.
-
-## Verification status
-
-The shared lifecycle passed all 80 steps on the signed iPhone SE build,
-including retirement and local key removal; server refresh/revocation assertions
-and sleep cleanup passed. Evidence:
-`.artifacts/ios-device-test/shared-auth-evidence.json`. Android versionCode 4
-passed all 108 generated steps using these shared flows, including verified
-empty fields, login, protected API, restart/refresh, logout, fresh login and
-retirement. Server checks confirmed refresh rotation, the same attested DPoP key
-across both families, and both families plus the credential/key revoked.
-Evidence: `.artifacts/android-device-test/shared-auth-v4-passed.json`. Sleep
-cleanup passed and stay-awake was restored to 0. Selective iOS missing-key
-recovery is a separate passing case, documented below; its server evidence is
-`.artifacts/ios-device-test/missing-key-server-evidence.json`.
 
 ## Screen lifecycle
 
@@ -125,16 +111,10 @@ MAESTRO_PLATFORM=android MAESTRO_DEVICE_ID=YOUR_SERIAL node scripts/device-lab/s
 
 Do not run two jobs against the same device simultaneously.
 
-Verified on the physical SE and Samsung SM-A166U: success and
-intentional-failure probes both ran cleanup successfully, including a new run
-from sleeping screens. Success returned 0; intentional failure retained exit 1.
-Evidence is in `.artifacts/device-screen/evidence.json`. These screen probes are
-separate from the authentication acceptance evidence.
-
 ### iOS selective missing-key recovery
 
-This is the D09 recovery case, using the same local runner. Build the dedicated
-lab app with `ATTESTATION_LAB_DIAGNOSTICS=1` and
+The same local runner can exercise selective key loss. Build the dedicated lab
+app with `ATTESTATION_LAB_DIAGNOSTICS=1` and
 `EXAMPLE_IOS_BUNDLE_ID=io.eventyr.attestationlab` during iOS prebuild. The
 opt-in config plugin adds an app-local native module; ordinary clean prebuilds
 omit it, and the reusable SDK contains no key-loss control. Use a clean prebuild
