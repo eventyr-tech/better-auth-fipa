@@ -72,7 +72,7 @@
     "@eventyr-tech/better-auth-fipa": "workspace:*",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.0",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "4.1.11",
     "better-auth": "1.7.5",
     "eslint": "^9.39.2",
     "publint": "^0.3.21",
@@ -81,7 +81,7 @@
     "react-native-dpop": "1.0.0",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.11"
   },
   "codegenConfig": {
     "name": "DeviceAttestationSpec",
