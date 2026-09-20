@@ -1,0 +1,28 @@
+appId: io.eventyr.attestationlab
+---
+- stopApp
+- launchApp:
+    clearState: false
+    permissions:
+      all: unset
+- runFlow: connect.yaml
+- scrollUntilVisible:
+    element:
+      id: "account-${TEST_SUBJECT}-saved"
+    direction: DOWN
+- tapOn:
+    id: "account-${TEST_SUBJECT}-saved"
+- scrollUntilVisible:
+    element:
+      id: restore-session
+    direction: DOWN
+- tapOn:
+    id: restore-session
+- scrollUntilVisible:
+    element:
+      id: auth-status
+    direction: DOWN
+- extendedWaitUntil:
+    visible: "Signed in.*"
+    timeout: 30000
+- runFlow: protected-api.yaml

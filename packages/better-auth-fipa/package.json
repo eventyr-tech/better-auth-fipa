@@ -1,0 +1,107 @@
+{
+  "name": "@eventyr-tech/better-auth-fipa",
+  "version": "0.1.0-alpha.3",
+  "description": "Attested first-party authentication for native iOS and Android apps, powered by Better Auth.",
+  "type": "module",
+  "sideEffects": [
+    "./dist/app-attest/x509.js",
+    "./dist/android/key-attestation.js"
+  ],
+  "license": "MIT",
+  "author": "Graham Arthur Blair",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eventyr-tech/better-auth-fipa.git",
+    "directory": "packages/better-auth-fipa"
+  },
+  "bugs": {
+    "url": "https://github.com/eventyr-tech/better-auth-fipa/issues"
+  },
+  "homepage": "https://github.com/eventyr-tech/better-auth-fipa#readme",
+  "keywords": [
+    "app-attest",
+    "attestation",
+    "better-auth",
+    "device-integrity",
+    "ios",
+    "oauth",
+    "security"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "packageManager": "pnpm@10.34.5",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "docs"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    },
+    "./first-party": {
+      "types": "./dist/first-party.d.ts",
+      "default": "./dist/first-party.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/sync-server-docs.mjs",
+    "check": "pnpm format:check && pnpm build && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm package:check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "package:check": "publint && attw --pack . --profile esm-only && pnpm package:smoke",
+    "package:smoke": "node scripts/package-smoke.mjs",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "test:postgres": "vitest run --config vitest.config.postgres.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@better-auth/oauth-provider": ">=1.7.5 <1.8.0",
+    "better-auth": ">=1.7.5 <1.8.0"
+  },
+  "peerDependenciesMeta": {
+    "@better-auth/oauth-provider": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@better-auth/oauth-provider": "1.7.5",
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.20.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "better-auth": "1.7.5",
+    "eslint": "^9.39.2",
+    "kysely": "0.28.17",
+    "pg": "^8.22.0",
+    "prettier": "^3.8.1",
+    "publint": "^0.3.21",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.1.4"
+  },
+  "dependencies": {
+    "@better-auth/core": "1.7.5",
+    "@peculiar/x509": "2.0.0",
+    "better-call": "1.4.0",
+    "cbor": "10.0.12",
+    "reflect-metadata": "0.2.2",
+    "zod": "4.4.3"
+  }
+}

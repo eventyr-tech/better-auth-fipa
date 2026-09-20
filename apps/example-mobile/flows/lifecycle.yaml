@@ -1,0 +1,7 @@
+appId: io.eventyr.attestationlab
+---
+- runShell: node scripts/device-lab/screen.mjs wake
+# Run this entrypoint, not the helpers directory. Each helper has preconditions.
+- runFlow: helpers/login.yaml
+- runFlow: helpers/restart.yaml
+- runFlow: helpers/logout-retire.yaml

@@ -1,100 +1,31 @@
 {
-  "name": "@grablair/better-auth-device-attestation",
-  "version": "0.1.0-alpha.3",
-  "description": "Device attestation for Better Auth, starting with Apple App Attest.",
+  "name": "better-auth-fipa-workspace",
+  "private": true,
   "type": "module",
-  "sideEffects": [
-    "./dist/app-attest/x509.js"
-  ],
-  "license": "MIT",
-  "author": "Graham Arthur Blair",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/grablair/better-auth-device-attestation.git"
-  },
-  "bugs": {
-    "url": "https://github.com/grablair/better-auth-device-attestation/issues"
-  },
-  "homepage": "https://github.com/grablair/better-auth-device-attestation#readme",
-  "keywords": [
-    "app-attest",
-    "attestation",
-    "better-auth",
-    "device-integrity",
-    "ios",
-    "oauth",
-    "security"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
   "packageManager": "pnpm@10.34.5",
-  "files": [
-    "dist",
-    "LICENSE",
-    "README.md",
-    "SECURITY.md",
-    "docs"
-  ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./client": {
-      "types": "./dist/client.d.ts",
-      "default": "./dist/client.js"
-    }
-  },
-  "publishConfig": {
-    "access": "public"
+  "engines": {
+    "node": ">=22.13.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm package:check",
+    "build": "turbo run build",
+    "check": "node scripts/sync-first-party-protocol.mjs --check && pnpm format:check && turbo run build lint typecheck test:coverage package:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint . --max-warnings=0",
-    "package:check": "pnpm build && publint && attw --pack . --profile esm-only && pnpm package:smoke",
-    "package:smoke": "node scripts/package-smoke.mjs",
-    "test": "vitest run --passWithNoTests",
-    "test:coverage": "vitest run --coverage --passWithNoTests",
-    "test:postgres": "vitest run --config vitest.config.postgres.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "peerDependencies": {
-    "@better-auth/oauth-provider": ">=1.7.0-rc.1 <1.8.0",
-    "better-auth": ">=1.7.0-rc.1 <1.8.0"
-  },
-  "peerDependenciesMeta": {
-    "@better-auth/oauth-provider": {
-      "optional": true
-    }
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "test:postgres": "turbo run test:postgres --filter=@eventyr-tech/better-auth-fipa",
+    "package:check": "turbo run package:check",
+    "dev": "turbo run dev",
+    "test:ios": "turbo run test:ios",
+    "verify:ios-package": "turbo run build --filter=@eventyr-tech/react-native-fipa && node scripts/verify-ios-package.mjs",
+    "verify:android-package": "turbo run build --filter=@eventyr-tech/react-native-fipa && node scripts/verify-android-package.mjs",
+    "test:android": "pnpm --filter @eventyr-tech/react-native-fipa test:android",
+    "verify:android-app": "turbo run build --filter=@eventyr-tech/react-native-fipa && node scripts/verify-android-app.mjs"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.5",
-    "@better-auth/oauth-provider": "1.7.0-rc.1",
-    "@eslint/js": "^9.39.2",
-    "@types/node": "^24.10.1",
-    "@types/pg": "^8.20.0",
-    "@vitest/coverage-v8": "4.1.10",
-    "better-auth": "1.7.0-rc.1",
-    "eslint": "^9.39.2",
-    "kysely": "0.28.17",
-    "pg": "^8.22.0",
     "prettier": "^3.8.1",
-    "publint": "^0.3.21",
-    "typescript": "5.9.3",
-    "typescript-eslint": "^8.56.1",
-    "vitest": "^4.1.4"
-  },
-  "dependencies": {
-    "@better-auth/core": "1.7.0-rc.1",
-    "@peculiar/x509": "2.0.0",
-    "cbor": "10.0.12",
-    "reflect-metadata": "0.2.2",
-    "zod": "4.4.3"
+    "turbo": "2.10.13"
   }
 }

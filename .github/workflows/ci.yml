@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+# Public-repository policy: free standard GitHub-hosted runners only.
+# macos-latest is a standard runner and is free for public repositories.
+# Do not substitute paid larger runners or paid third-party runner services.
 jobs:
   check:
     name: Node ${{ matrix.node }}
@@ -17,7 +20,6 @@ jobs:
       fail-fast: false
       matrix:
         node:
-          - 20
           - 22
           - 24
     steps:
@@ -58,3 +60,49 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:postgres
+
+  ios:
+    name: iOS native consumer
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec turbo run build test:ios --filter
+          @eventyr-tech/react-native-fipa
+      - run: node scripts/verify-ios-package.mjs
+
+  android:
+    name: Android native library and reference app
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: 8.14.3
+      - name: Set up Android SDK command-line tools
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:android
+      - run: pnpm verify:android-package
+      - run: pnpm verify:android-app

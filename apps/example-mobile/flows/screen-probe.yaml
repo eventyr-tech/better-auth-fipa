@@ -1,0 +1,10 @@
+appId: io.eventyr.attestationlab
+---
+- runShell: node scripts/device-lab/screen.mjs wake
+- launchApp:
+    clearState: false
+    permissions:
+      all: unset
+- assertVisible: "First-party authentication"
+# Deliberate failure mode verifies completion cleanup, without signing in.
+- assertTrue: ${SCREEN_PROBE_FAIL != "1"}

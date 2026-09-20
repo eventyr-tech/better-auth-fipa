@@ -1,0 +1,35 @@
+appId: io.eventyr.attestationlab
+---
+# Continues the signed-in session from restart.yaml. Do not relaunch here.
+- scrollUntilVisible:
+    element:
+      id: sign-out
+    direction: UP
+- tapOn:
+    id: sign-out
+- scrollUntilVisible:
+    element:
+      id: auth-status
+    direction: DOWN
+- assertVisible:
+    "Signed out locally. Server revocation: confirmed. Keys: retained."
+- scrollUntilVisible:
+    element:
+      id: fresh-login
+    direction: UP
+- tapOn:
+    id: fresh-login
+- runFlow: password.yaml
+- runFlow: protected-api.yaml
+- scrollUntilVisible:
+    element:
+      id: retire-credential
+    direction: UP
+- tapOn:
+    id: retire-credential
+- tapOn: "(?i)^Retire$"
+- scrollUntilVisible:
+    element: "Retirement: confirmed. Keys: removed."
+    direction: DOWN
+    timeout: 30000
+- assertVisible: "Retirement: confirmed. Keys: removed."

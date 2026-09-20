@@ -1,0 +1,15 @@
+appId: io.eventyr.attestationlab
+---
+- scrollUntilVisible:
+    element:
+      id: protected-api
+    direction: UP
+- tapOn:
+    id: protected-api
+- scrollUntilVisible:
+    element:
+      id: auth-status
+    direction: DOWN
+- extendedWaitUntil:
+    visible: "Protected API verified this session:.*"
+    timeout: 30000
