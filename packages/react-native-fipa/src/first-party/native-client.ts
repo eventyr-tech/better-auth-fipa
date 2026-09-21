@@ -1,4 +1,5 @@
-import Simulator from "../NativeIOSSimulator.ts";
+import { createDevelopmentVault } from "./development-vault.ts";
+import { createDevelopmentFirstPartyClient } from "./development-client.ts";
 import { Platform } from "react-native";
 import Integrity from "../NativeAndroidIntegrity.ts";
 import Recovery from "../NativeAndroidVaultRecovery.ts";
@@ -13,13 +14,29 @@ import type { NativeFirstPartyConfiguration } from "./native-lifecycle.ts";
 /** Native platform selection. Signed-device release certification remains required. */
 export function createNativeFirstPartyClient(
   config: NativeFirstPartyConfiguration,
-) {
+):
+  | ReturnType<typeof createDevelopmentFirstPartyClient>
+  | ReturnType<typeof createIOSFirstPartyClient>
+  | ReturnType<typeof createAndroidFirstPartyClient> {
+  if (
+    config.provider !== undefined &&
+    !["hardware", "development"].includes(config.provider)
+  )
+    throw new FirstPartyClientError("invalid_configuration");
+  if (config.provider === "development") {
+    if (config.environment !== "development")
+      throw new FirstPartyClientError("invalid_configuration");
+    if (!["ios", "android"].includes(Platform.OS))
+      throw new FirstPartyClientError("unsupported_platform");
+    if (!Transport) throw new FirstPartyClientError("native_unavailable");
+    const transport = Transport;
+    return createDevelopmentFirstPartyClient(config, {
+      transport,
+      vault: createDevelopmentVault(() => transport.randomToken()),
+    });
+  }
   if (Platform.OS === "android") {
-    if (
-      config.ios?.provider === "ios-simulator" ||
-      config.environment !== "production" ||
-      !config.android
-    )
+    if (config.environment !== "production" || !config.android)
       throw new FirstPartyClientError("invalid_configuration");
     if (!Integrity || !Recovery || !Transport || !Vault)
       throw new FirstPartyClientError("native_unavailable");
@@ -35,37 +52,6 @@ export function createNativeFirstPartyClient(
   }
   if (Platform.OS !== "ios")
     throw new FirstPartyClientError("unsupported_platform");
-  if (config.ios?.provider === "ios-simulator") {
-    if (config.environment !== "development")
-      throw new FirstPartyClientError("invalid_configuration");
-    if (!Simulator || !Transport || !Vault)
-      throw new FirstPartyClientError("native_unavailable");
-    const simulator = Simulator;
-    const transport = Transport;
-    return createIOSFirstPartyClient(config, {
-      appAttest: {
-        getKey: (...args) => simulator.getKey(...args),
-        getOrCreateKey: (...args) => simulator.getOrCreateKey(...args),
-        generateEvidence: (...args) => simulator.generateEvidence(...args),
-        removeKey: (...args) => simulator.removeKey(...args),
-        resetKey: () =>
-          Promise.reject(new FirstPartyClientError("invalid_configuration")),
-      },
-      transport: {
-        randomToken: () => transport.randomToken(),
-        transaction: () => transport.transaction(),
-        send: (...args) => transport.send(...args),
-        cancel: (...args) => transport.cancel(...args),
-        openBrowser: (...args) => transport.openBrowser(...args),
-        cancelBrowser: (...args) => transport.cancelBrowser(...args),
-        prepareDpop: (...args) => simulator.prepareDpop(...args),
-        inspectDpop: (...args) => simulator.inspectDpop(...args),
-        signDpop: (...args) => simulator.signDpop(...args),
-        removeDpop: (...args) => simulator.removeDpop(...args),
-      },
-      vault: Vault,
-    });
-  }
   if (!AppAttest || !Transport || !Vault)
     throw new FirstPartyClientError("native_unavailable");
   return createIOSFirstPartyClient(config, {

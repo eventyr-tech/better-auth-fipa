@@ -5,7 +5,7 @@ import {
   sign,
 } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import { iosSimulator } from "./ios-simulator.js";
+import { developmentProvider } from "./development.js";
 import { appAttest } from "./app-attest/provider.js";
 import type { StoredAttestationCredential } from "./types.js";
 import { createNativeAdmissionEndpoints } from "./first-party/admission-endpoints.js";
@@ -17,7 +17,7 @@ const options = {
 } as const;
 afterEach(() => vi.unstubAllEnvs());
 function fixture() {
-  const provider = iosSimulator(options);
+  const provider = developmentProvider(options);
   const { publicKey, privateKey } = generateKeyPairSync("ec", {
     namedCurve: "prime256v1",
   });
@@ -27,13 +27,13 @@ function fixture() {
     Buffer.from(
       JSON.stringify({
         version: 1,
-        provider: "ios-simulator",
+        provider: "development",
         operation,
         jwk: publicKey.export({ format: "jwk" }),
         signature: sign(
           "sha256",
           Buffer.from(
-            `fipa/ios-simulator/v1\n${operation}\n${keyId.toString("base64")}\n${clientDataHash.toString("base64")}`,
+            `fipa/development/v1\n${operation}\n${keyId.toString("base64")}\n${clientDataHash.toString("base64")}`,
           ),
           { key: privateKey, dsaEncoding: "ieee-p1363" },
         ).toString("base64url"),
@@ -41,7 +41,7 @@ function fixture() {
     );
   const credential: StoredAttestationCredential = {
     id: "credential",
-    provider: "ios-simulator",
+    provider: "development",
     applicationId: "TEAM.app",
     environment: "development",
     lookupKey: "lookup",
@@ -75,13 +75,16 @@ it("accepts only separately identified software proof of possession", async () =
 });
 it("fails closed without explicit opt-in or in production", () => {
   expect(() =>
-    iosSimulator({ ...options, enabled: false as unknown as true }),
+    developmentProvider({ ...options, enabled: false as unknown as true }),
   ).toThrow();
   expect(() =>
-    iosSimulator({ ...options, environment: "production" as "development" }),
+    developmentProvider({
+      ...options,
+      environment: "production" as "development",
+    }),
   ).toThrow();
   vi.stubEnv("NODE_ENV", "production");
-  expect(() => iosSimulator(options)).toThrow();
+  expect(() => developmentProvider(options)).toThrow();
 });
 it("rejects runtime production registration and assertion even for an earlier factory", async () => {
   const f = fixture();
@@ -98,12 +101,12 @@ it("rejects runtime production registration and assertion even for an earlier fa
     f.provider.verifyAssertion({ ...f, evidence: f.evidence("assert") }),
   ).rejects.toThrow();
 });
-it("rejects a simulator provider in a production native policy", () => {
+it("rejects a development provider in a production native policy", () => {
   expect(() =>
     createNativeAdmissionEndpoints([
       {
         clientId: "mobile",
-        provider: iosSimulator(options),
+        provider: developmentProvider(options),
         applicationId: "TEAM.app",
         environment: "production",
         scopes: [],
@@ -132,11 +135,12 @@ it.each(["application", "challenge", "key", "operation", "signature"])(
     await expect(f.provider.verifyRegistration(input)).rejects.toThrow();
   },
 );
-it.each(["app-attest", "production", "another-key"])(
+it.each(["app-attest", "android-hardware", "production", "another-key"])(
   "rejects stored credential from %s trust domain",
   async (domain) => {
     const f = fixture();
-    if (domain === "app-attest") f.credential.provider = domain;
+    if (domain === "app-attest" || domain === "android-hardware")
+      f.credential.provider = domain;
     if (domain === "production") f.credential.environment = domain;
     if (domain === "another-key")
       f.credential.publicKey = fixture().credential.publicKey!;
@@ -145,7 +149,7 @@ it.each(["app-attest", "production", "another-key"])(
     ).rejects.toThrow();
   },
 );
-it("simulator evidence cannot register with App Attest", async () => {
+it("development evidence cannot register with App Attest", async () => {
   const f = fixture();
   const hardware = appAttest({
     applications: [

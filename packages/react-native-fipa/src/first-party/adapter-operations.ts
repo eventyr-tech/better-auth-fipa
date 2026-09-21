@@ -60,7 +60,6 @@ export async function nativeOperation<T>(
     const permanent = code(error);
     if (
       permanent === "app_attest_unavailable" ||
-      permanent === "simulator_unavailable" ||
       permanent === "key_unavailable" ||
       permanent === "key_locked" ||
       permanent === "key_invalid_input"

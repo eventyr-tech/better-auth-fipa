@@ -1,4 +1,4 @@
-import { simulatorPolicyAllowed } from "../ios-simulator.js";
+import { developmentPolicyAllowed } from "../development.js";
 import { requireUserSecurity } from "./user-security.js";
 import type { GenericEndpointContext } from "@better-auth/core";
 import {
@@ -935,7 +935,10 @@ function checkPolicy(
     throw invalidGrant();
   if (
     !application ||
-    !simulatorPolicyAllowed(application.provider.id, application.environment) ||
+    !developmentPolicyAllowed(
+      application.provider.id,
+      application.environment,
+    ) ||
     family.assurance.provider !== application.provider.id ||
     family.assurance.applicationId !== application.applicationId ||
     family.assurance.environment !== application.environment ||

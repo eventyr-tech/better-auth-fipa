@@ -1,4 +1,4 @@
-import { iosSimulator } from "../../../better-auth-fipa/src/ios-simulator.js";
+import { developmentProvider } from "../../../better-auth-fipa/src/development.js";
 import { androidIdentitySchema } from "./android-identity.ts";
 import { iosIdentitySchema } from "./ios-identity.ts";
 import { createMemorySessionVault as vault } from "../test-fixtures/session-vault.ts";
@@ -43,29 +43,29 @@ const random = () => randomBytes(32).toString("base64url");
 const hash = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest();
 async function fixture(
-  options: { ios?: boolean; emailOTP?: boolean; simulator?: boolean } = {},
+  options: { ios?: boolean; emailOTP?: boolean; development?: boolean } = {},
 ) {
   const app = "TEAM.sdk";
   const providerKey = randomBytes(32).toString("base64");
-  const simulatorKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-  const simulatorEvidence = (keyId: string, data: string, operation: string) =>
+  const softwareKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const softwareEvidence = (keyId: string, data: string, operation: string) =>
     Buffer.from(
       JSON.stringify({
         version: 1,
-        provider: "ios-simulator",
+        provider: "development",
         operation,
-        jwk: simulatorKey.publicKey.export({ format: "jwk" }),
+        jwk: softwareKey.publicKey.export({ format: "jwk" }),
         signature: sign(
           "sha256",
           Buffer.from(
-            `fipa/ios-simulator/v1\n${operation}\n${keyId}\n${hash(Buffer.from(data, "base64url")).toString("base64")}`,
+            `fipa/development/v1\n${operation}\n${keyId}\n${hash(Buffer.from(data, "base64url")).toString("base64")}`,
           ),
-          { key: simulatorKey.privateKey, dsaEncoding: "ieee-p1363" },
+          { key: softwareKey.privateKey, dsaEncoding: "ieee-p1363" },
         ).toString("base64url"),
       }),
     ).toString("base64");
-  const provider: DeviceAttestationProvider = options.simulator
-    ? iosSimulator({
+  const provider: DeviceAttestationProvider = options.development
+    ? developmentProvider({
         enabled: true,
         environment: "development",
         applicationIds: [app],
@@ -134,7 +134,7 @@ async function fixture(
         clientId: "mobile",
         provider,
         applicationId: app,
-        environment: options.simulator ? "development" : "production",
+        environment: options.development ? "development" : "production",
         scopes: ["offline_access"],
         resources: [],
       },
@@ -416,7 +416,7 @@ async function fixture(
     clientId: "mobile",
     applicationId: app,
     provider: provider.id,
-    environment: options.simulator
+    environment: options.development
       ? ("development" as const)
       : ("production" as const),
     storageNamespace: "test-sdk",
@@ -461,7 +461,7 @@ async function fixture(
     ports.keys = createIOSKeyPorts(
       {
         ...config,
-        provider: options.simulator ? "ios-simulator" : "app-attest",
+        provider: options.development ? "development" : "app-attest",
         keyIdStoragePrefix: "fixture.app-attest.",
         aliases: () =>
           Promise.resolve({
@@ -483,8 +483,8 @@ async function fixture(
             return Promise.resolve({ keyId: providerKey, created });
           },
           generateEvidence: (_key, data, operation) => {
-            if (options.simulator)
-              return Promise.resolve(simulatorEvidence(_key, data, operation));
+            if (options.development)
+              return Promise.resolve(softwareEvidence(_key, data, operation));
             if (operation === "register") {
               controls.nativeRegistrations++;
               // An irreversible Apple operation must have a durable journal first.
@@ -552,7 +552,7 @@ async function fixture(
     completeBrowser,
     sentOTP,
     nativeOptions,
-    simulatorEvidence,
+    softwareEvidence,
   };
 }
 
@@ -922,9 +922,9 @@ describe("FiPA client against real Better Auth endpoints", () => {
     expect(f.ports.keys.prepare).toHaveBeenCalledOnce();
   });
   it.each([false, true])(
-    "runs the native OTP lifecycle without persisting submitted email or OTP and restores its typed continuation (simulator: %s)",
-    async (simulator) => {
-      const f = await fixture({ emailOTP: true, ios: true, simulator });
+    "runs the native OTP lifecycle without persisting submitted email or OTP and restores its typed continuation (development: %s)",
+    async (development) => {
+      const f = await fixture({ emailOTP: true, ios: true, development });
       const start = await f.client.start("slot");
       if (start.kind !== "interaction-required")
         throw new Error("expected method selection");
@@ -1098,19 +1098,15 @@ describe("FiPA client against real Better Auth endpoints", () => {
   });
 
   it.each([
-    [false, false, false, true],
-    [false, false, false, false],
+    [false, false, false],
     [true, false, false],
     [true, true, false],
     [true, true, true],
   ])(
     "composes the iOS SDK (retained keys: %s, interrupted import: %s, recover import: %s)",
-    async (imported, interrupted, recoverImport, simulator = false) => {
-      const f = await fixture({ ios: true, simulator });
-      const nativeConfig = {
-        ...f.config,
-        ...(simulator ? { ios: { provider: "ios-simulator" as const } } : {}),
-      };
+    async (imported, interrupted, recoverImport) => {
+      const f = await fixture({ ios: true });
+      const nativeConfig = { ...f.config, provider: "hardware" as const };
       const indexStorage = vault();
       const identity = await f.ports.keys.prepare("slot");
       const reference = {
@@ -1177,11 +1173,9 @@ describe("FiPA client against real Better Auth endpoints", () => {
           getOrCreateKey,
           generateEvidence: (_key, data, operation) =>
             Promise.resolve(
-              simulator
-                ? f.simulatorEvidence(_key, data, operation)
-                : operation === "register"
-                  ? Buffer.from("fixture").toString("base64")
-                  : hash(Buffer.from(data, "base64url")).toString("base64"),
+              operation === "register"
+                ? Buffer.from("fixture").toString("base64")
+                : hash(Buffer.from(data, "base64url")).toString("base64"),
             ),
           resetKey: () => Promise.reject(new Error("must not reset")),
           removeKey: () => {
@@ -1236,31 +1230,7 @@ describe("FiPA client against real Better Auth endpoints", () => {
           cancelBrowser: () => Promise.resolve(),
         },
       };
-      let compose = () => createIOSFirstPartyClient(nativeConfig, native);
-      if (simulator) {
-        vi.doMock("react-native", () => ({
-          Platform: { OS: "ios" },
-          TurboModuleRegistry: {
-            get: (name: string) =>
-              (
-                ({
-                  DeviceAttestationIOSSimulator: {
-                    ...native.appAttest,
-                    ...native.transport,
-                  },
-                  DeviceAttestationSessionVault: native.vault,
-                  DeviceAttestationFirstPartyTransport: native.transport,
-                }) as Record<string, unknown>
-              )[name] ?? null,
-          },
-        }));
-        const { createNativeFirstPartyClient } =
-          await import("./native-client.ts");
-        compose = () =>
-          createNativeFirstPartyClient(nativeConfig) as ReturnType<
-            typeof createIOSFirstPartyClient
-          >;
-      }
+      const compose = () => createIOSFirstPartyClient(nativeConfig, native);
       const sdk = compose();
       let account: Awaited<ReturnType<typeof sdk.accounts.create>>;
       if (interrupted) {
@@ -1348,7 +1318,6 @@ describe("FiPA client against real Better Auth endpoints", () => {
         code: "invalid_request",
       });
       expect(prepareDpop).toHaveBeenCalledTimes(imported ? 0 : 1);
-      if (simulator) vi.doUnmock("react-native");
     },
   );
 
@@ -2718,9 +2687,9 @@ describe("local origins at the client boundary", () => {
   });
 });
 
-describe("simulator native protocol failure boundaries", () => {
+describe("development native protocol failure boundaries", () => {
   it("keeps failed password and cancelled OTP attempts signed out", async () => {
-    const f = await fixture({ ios: true, simulator: true, emailOTP: true });
+    const f = await fixture({ ios: true, development: true, emailOTP: true });
     const wrong = await f.respond(await f.client.start("slot"), "incorrect");
     expect(wrong).toMatchObject({
       kind: "interaction-required",
@@ -2750,9 +2719,9 @@ describe("simulator native protocol failure boundaries", () => {
     ).toBe(0);
   });
   it.each(["provider", "environment", "production-runtime"])(
-    "rejects simulator token refresh and resource access after %s policy changes",
+    "rejects development token refresh and resource access after %s policy changes",
     async (change) => {
-      const f = await fixture({ ios: true, simulator: true });
+      const f = await fixture({ ios: true, development: true });
       expect((await f.respond(await f.client.start("slot"))).kind).toBe(
         "authenticated",
       );
@@ -2780,8 +2749,8 @@ describe("simulator native protocol failure boundaries", () => {
   );
 });
 
-it("production denies initial simulator token issuance even after successful password verification", async () => {
-  const f = await fixture({ ios: true, simulator: true });
+it("production denies initial development token issuance even after successful password verification", async () => {
+  const f = await fixture({ ios: true, development: true });
   const step = await f.client.start("slot");
   const send = f.ports.send;
   f.ports.send = (request) => {
@@ -2798,12 +2767,12 @@ it("production denies initial simulator token issuance even after successful pas
     vi.unstubAllEnvs();
   }
 });
-it("a server without the simulator provider rejects simulator registration", async () => {
+it("a server without the development provider rejects development registration", async () => {
   const f = await fixture({ ios: true });
   await expect(
     f.auth.api.createDeviceAttestationChallenge!({
       body: {
-        provider: "ios-simulator",
+        provider: "development",
         applicationId: f.config.applicationId,
         keyId: randomBytes(32).toString("base64"),
         operation: "register",
@@ -2812,3 +2781,169 @@ it("a server without the simulator provider rejects simulator registration", asy
     }),
   ).rejects.toThrow();
 });
+
+// Exercise the shipped TypeScript provider and real server verification. Only
+// generic device storage/HTTP ports are replaced; evidence and DPoP are real.
+it.each(["ios", "android"])(
+  "runs shared development password/OTP, restore, fetch, cancellation and logout on %s",
+  async (platform) => {
+    const f = await fixture({ ios: true, development: true, emailOTP: true });
+    const stored = new Map<string, string>();
+    vi.doMock("@react-native-async-storage/async-storage", () => ({
+      default: {
+        getItem: (key: string) => Promise.resolve(stored.get(key) ?? null),
+        setItem: (key: string, value: string) => {
+          stored.set(key, value);
+          return Promise.resolve();
+        },
+      },
+    }));
+    const hardware = vi.fn(() => {
+      throw new Error("hardware must not be called");
+    });
+    const transport = {
+      randomToken: () => Promise.resolve(random()),
+      transaction: () => f.ports.crypto.transaction(),
+      prepareDpop: hardware,
+      signDpop: hardware,
+      send: async (
+        _id: string,
+        url: string,
+        method: "POST",
+        headersJSON: string,
+        body: string | null,
+        maximumResponseBytes: number,
+      ) => {
+        const result = await f.ports.send({
+          url,
+          method,
+          headers: JSON.parse(headersJSON) as Record<string, string>,
+          body,
+          maximumResponseBytes,
+          signal: new AbortController().signal,
+        });
+        return {
+          url: result.url,
+          status: result.status,
+          body: result.body,
+          headersJSON: JSON.stringify(result.headers ?? {}),
+        };
+      },
+      cancel: () => Promise.resolve(),
+      openBrowser: hardware,
+      cancelBrowser: () => Promise.resolve(),
+    };
+    vi.resetModules();
+    vi.doMock("react-native", () => ({
+      Platform: { OS: platform },
+      TurboModuleRegistry: {
+        get: (name: string) =>
+          (
+            ({
+              DeviceAttestationFirstPartyTransport: transport,
+            }) as Record<string, unknown>
+          )[name] ?? null,
+      },
+    }));
+    try {
+      const { createNativeFirstPartyClient } =
+        await import("./native-client.ts");
+      const compose = () =>
+        createNativeFirstPartyClient({
+          ...f.config,
+          provider: "development",
+          environment: "development",
+        });
+      let sdk = compose();
+      const account = await sdk.accounts.create();
+      const slot = account.slotId;
+      const password = async (value: string) => {
+        const start = await sdk.start(slot);
+        if (start.kind !== "interaction-required")
+          throw new Error("expected password");
+        return sdk.respond(slot, {
+          flowId: start.flowId,
+          stepId: start.step.id,
+          response: {
+            kind: "password",
+            email: f.testUser.email,
+            password: value,
+          },
+        });
+      };
+      expect(await password("wrong-password")).toMatchObject({
+        failure: "invalid_credentials",
+      });
+      await sdk.cancel(slot);
+      expect(await sdk.restore(slot)).toMatchObject({ kind: "signed-out" });
+      expect(await password(f.testUser.password)).toMatchObject({
+        kind: "authenticated",
+      });
+      sdk = compose();
+      expect(await sdk.accounts.list()).toMatchObject([
+        { slotId: slot, hasSession: true },
+      ]);
+      expect(await sdk.restore(slot)).toMatchObject({ kind: "authenticated" });
+      expect(
+        await sdk.fetch(slot, `${f.config.issuer}/sdk-resource`),
+      ).toMatchObject({ status: 200 });
+      expect(await sdk.logout(slot)).toMatchObject({
+        remote: "confirmed",
+        keys: "retained",
+      });
+      await expect(
+        sdk.fetch(slot, `${f.config.issuer}/sdk-resource`),
+      ).rejects.toMatchObject({ code: "reauthentication_required" });
+      const start = await sdk.start(slot);
+      if (start.kind !== "interaction-required")
+        throw new Error("expected selection");
+      const sent = await sdk.respond(slot, {
+        flowId: start.flowId,
+        stepId: start.step.id,
+        response: { kind: "email-otp-request", email: f.testUser.email },
+      });
+      if (sent.kind !== "interaction-required") throw new Error("expected OTP");
+      sdk = compose();
+      expect(await sdk.restore(slot)).toEqual(sent);
+      const wrong = await sdk.respond(slot, {
+        flowId: sent.flowId,
+        stepId: sent.step.id,
+        response: { kind: "email-otp", otp: "invalid-code" },
+      });
+      if (wrong.kind !== "interaction-required")
+        throw new Error("expected retry");
+      expect(wrong.failure).toBe("invalid_credentials");
+      expect(
+        await sdk.respond(slot, {
+          flowId: wrong.flowId,
+          stepId: wrong.step.id,
+          response: { kind: "email-otp", otp: f.sentOTP[0]!.otp },
+        }),
+      ).toMatchObject({ kind: "authenticated" });
+      expect(
+        await sdk.fetch(slot, `${f.config.issuer}/sdk-resource`),
+      ).toMatchObject({ status: 200 });
+      const persisted = JSON.stringify([...stored.values()]);
+      for (const sensitive of [
+        f.testUser.password,
+        f.testUser.email,
+        "wrong-password",
+        "invalid-code",
+        f.sentOTP[0]!.otp,
+      ])
+        expect(persisted).not.toContain(sensitive);
+      expect(hardware).not.toHaveBeenCalled();
+      expect(await sdk.retire(slot)).toMatchObject({
+        remote: "confirmed",
+        keys: "removed",
+      });
+      await sdk.accounts.forget(slot);
+      expect(await sdk.accounts.list()).toEqual([]);
+    } finally {
+      vi.doUnmock("react-native");
+      vi.doUnmock("@react-native-async-storage/async-storage");
+      vi.resetModules();
+    }
+  },
+  30_000,
+);

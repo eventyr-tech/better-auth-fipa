@@ -1,4 +1,4 @@
-import { simulatorPolicyAllowed } from "../ios-simulator.js";
+import { developmentPolicyAllowed } from "../development.js";
 import { isAndroidHardwareProvider } from "../android/provider.js";
 import {
   createAndroidKeyChallenge,
@@ -35,11 +35,11 @@ export function createNativeAdmissionEndpoints(
 ) {
   if (
     applications.some(
-      (app) => !simulatorPolicyAllowed(app.provider.id, app.environment),
+      (app) => !developmentPolicyAllowed(app.provider.id, app.environment),
     )
   )
     throw new TypeError(
-      "iOS Simulator admission requires development configuration.",
+      "The development provider requires development admission configuration.",
     );
   const clients = new Map(applications.map((app) => [app.clientId, app]));
   if (!clients.size || clients.size !== applications.length)

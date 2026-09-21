@@ -56,7 +56,6 @@ it("normalizes transport failures while retaining invalid-response errors", asyn
 
 it.each([
   "app_attest_unavailable",
-  "simulator_unavailable",
   "key_unavailable",
   "key_locked",
   "key_invalid_input",

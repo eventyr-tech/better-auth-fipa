@@ -26,4 +26,4 @@ export type {
   PlayIntegrityPolicy,
 } from "./android.js";
 
-export { iosSimulator } from "./ios-simulator.js";
+export { developmentProvider } from "./development.js";

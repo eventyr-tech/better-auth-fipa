@@ -4,19 +4,22 @@ import { decodeBase64Strict } from "./encoding/base64.js";
 import { rejection } from "./errors.js";
 import type { DeviceAttestationProvider } from "./types.js";
 
-export const IOS_SIMULATOR_PROVIDER = "ios-simulator";
+export const DEVELOPMENT_PROVIDER = "development";
 
 /** Additional fail-closed guard; hosts must omit this provider from production. */
-export function simulatorPolicyAllowed(provider: string, environment: string) {
+export function developmentPolicyAllowed(
+  provider: string,
+  environment: string,
+) {
   return (
-    provider !== IOS_SIMULATOR_PROVIDER ||
+    provider !== DEVELOPMENT_PROVIDER ||
     (environment === "development" && process.env.NODE_ENV !== "production")
   );
 }
 
 const envelope = z.strictObject({
   version: z.literal(1),
-  provider: z.literal(IOS_SIMULATOR_PROVIDER),
+  provider: z.literal(DEVELOPMENT_PROVIDER),
   operation: z.enum(["register", "assert"]),
   jwk: z.strictObject({
     kty: z.literal("EC"),
@@ -29,33 +32,33 @@ const envelope = z.strictObject({
 
 /** Development proof of software-key possession, NOT hardware/app attestation.
  * Omit from hosted production, even when NODE_ENV is not set to production. */
-export function iosSimulator(options: {
+export function developmentProvider(options: {
   enabled: true;
   environment: "development";
   applicationIds: readonly string[];
 }): DeviceAttestationProvider {
   if (
     options.enabled !== true ||
-    !simulatorPolicyAllowed(IOS_SIMULATOR_PROVIDER, options.environment) ||
+    !developmentPolicyAllowed(DEVELOPMENT_PROVIDER, options.environment) ||
     !options.applicationIds.length ||
     new Set(options.applicationIds).size !== options.applicationIds.length ||
     options.applicationIds.some((id) => !id || id.length > 256)
   )
     throw new TypeError(
-      "iOS Simulator requires explicit development opt-in and unique application IDs; omit it from production.",
+      "The development provider requires explicit development opt-in and unique application IDs; omit it from production.",
     );
   const applications = new Set(options.applicationIds);
   const eligible = (applicationId?: string) => {
     if (
-      !simulatorPolicyAllowed(IOS_SIMULATOR_PROVIDER, "development") ||
+      !developmentPolicyAllowed(DEVELOPMENT_PROVIDER, "development") ||
       (applicationId !== undefined && !applications.has(applicationId))
     )
-      throw rejection("platform-policy", "simulator_not_allowed");
+      throw rejection("platform-policy", "development_not_allowed");
   };
   const decodeKeyId = (value: string) => {
     eligible();
     return decodeBase64Strict(value, {
-      label: "simulator_key_id",
+      label: "development_key_id",
       maxBytes: 32,
       exactBytes: 32,
     });
@@ -73,14 +76,14 @@ export function iosSimulator(options: {
       input.keyId.length !== 32 ||
       input.clientDataHash.length !== 32
     )
-      throw rejection("signature", "invalid_simulator_evidence");
+      throw rejection("signature", "invalid_development_evidence");
     try {
       const data = envelope.parse(
         JSON.parse(Buffer.from(input.evidence).toString("utf8")) as unknown,
       );
       if (data.operation !== operation) throw new Error();
       const key = createPublicKey({ key: data.jwk, format: "jwk" });
-      const message = `fipa/ios-simulator/v1\n${operation}\n${Buffer.from(input.keyId).toString("base64")}\n${Buffer.from(input.clientDataHash).toString("base64")}`;
+      const message = `fipa/development/v1\n${operation}\n${Buffer.from(input.keyId).toString("base64")}\n${Buffer.from(input.clientDataHash).toString("base64")}`;
       const signature = Buffer.from(data.signature, "base64url");
       if (
         signature.toString("base64url") !== data.signature ||
@@ -94,11 +97,11 @@ export function iosSimulator(options: {
         throw new Error();
       return key.export({ type: "spki", format: "der" }).toString("base64");
     } catch {
-      throw rejection("signature", "invalid_simulator_evidence");
+      throw rejection("signature", "invalid_development_evidence");
     }
   }
   return {
-    id: IOS_SIMULATOR_PROVIDER,
+    id: DEVELOPMENT_PROVIDER,
     maxEvidenceBytes: 4096,
     decodeKeyId,
     verifyRegistration: (input) =>
@@ -116,16 +119,16 @@ export function iosSimulator(options: {
       Promise.resolve().then(() => {
         eligible(input.credential.applicationId);
         if (
-          input.credential.provider !== IOS_SIMULATOR_PROVIDER ||
+          input.credential.provider !== DEVELOPMENT_PROVIDER ||
           input.credential.environment !== "development" ||
           evidence(input, "assert") !== input.credential.publicKey
         )
           throw rejection(
             "credential-binding",
-            "simulator_credential_mismatch",
+            "development_credential_mismatch",
           );
         // The shared one-time challenge and counter CAS prevent replay. This is a
-        // server sequence, not an Apple hardware monotonic counter.
+        // server sequence, not a hardware monotonic counter.
         return {
           counter: input.credential.counter + 1,
           extensionsPresent: false,

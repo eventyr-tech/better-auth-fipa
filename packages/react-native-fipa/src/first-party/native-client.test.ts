@@ -16,6 +16,16 @@ async function load(
   absent?: string,
   modules: Record<string, unknown> = {},
 ) {
+  const storage = new Map<string, string>();
+  vi.doMock("@react-native-async-storage/async-storage", () => ({
+    default: {
+      getItem: (key: string) => Promise.resolve(storage.get(key) ?? null),
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+        return Promise.resolve();
+      },
+    },
+  }));
   vi.resetModules();
   const get = vi.fn((name: string) =>
     name === absent ? null : (modules[name] ?? {}),
@@ -28,6 +38,7 @@ async function load(
 }
 afterEach(() => {
   vi.doUnmock("react-native");
+  vi.doUnmock("@react-native-async-storage/async-storage");
   vi.resetModules();
 });
 
@@ -59,7 +70,6 @@ describe("default native first-party entry", () => {
     expect(get.mock.calls.map(([name]) => name).sort()).toEqual(
       [
         "DeviceAttestationAppAttest",
-        "DeviceAttestationIOSSimulator",
         "DeviceAttestationAndroidIntegrity",
         "DeviceAttestationAndroidVaultRecovery",
         "DeviceAttestationFirstPartyTransport",
@@ -89,9 +99,10 @@ describe("Android native first-party entry", () => {
     const sdk = createNativeFirstPartyClient(android);
     expect(typeof sdk.start).toBe("function");
     expect("importIOSKeys" in sdk.accounts).toBe(false);
-    expect("storage" in sdk && typeof sdk.storage.prepareRecovery).toBe(
-      "function",
-    );
+    expect(
+      "storage" in sdk &&
+        typeof (sdk.storage as { prepareRecovery: unknown }).prepareRecovery,
+    ).toBe("function");
   });
   it.each([
     "DeviceAttestationAndroidIntegrity",
@@ -131,36 +142,40 @@ it.each([
   expect(() => createNativeFirstPartyClient(config)).not.toThrow();
 });
 
-describe("explicit simulator selection", () => {
-  const simulator = {
+describe("explicit development selection", () => {
+  const developmentConfig = {
     ...config,
     environment: "development" as const,
-    ios: { provider: "ios-simulator" as const },
+    provider: "development" as const,
   };
   it("does not require App Attest when explicitly opted in", async () => {
     const { createNativeFirstPartyClient } = await load(
       "ios",
       "DeviceAttestationAppAttest",
     );
-    expect(() => createNativeFirstPartyClient(simulator)).not.toThrow();
-  });
-  it("requires its own compiled module", async () => {
-    const { createNativeFirstPartyClient } = await load(
-      "ios",
-      "DeviceAttestationIOSSimulator",
-    );
-    expect(() => createNativeFirstPartyClient(simulator)).toThrow(
-      expect.objectContaining({ code: "native_unavailable" }),
-    );
-    expect(() => createNativeFirstPartyClient(config)).not.toThrow();
+    expect(() => createNativeFirstPartyClient(developmentConfig)).not.toThrow();
   });
   it.each(["ios", "android"])(
-    "rejects production simulator configuration on %s",
+    "uses shared modules on %s without hardware attestation",
+    async (os) => {
+      const f = nativeTestModules();
+      const { createNativeFirstPartyClient } = await load(
+        os,
+        "DeviceAttestationAppAttest",
+        f.modules,
+      );
+      const sdk = createNativeFirstPartyClient(developmentConfig);
+      expect(await sdk.accounts.create()).toHaveProperty("slotId");
+      expect("importIOSKeys" in sdk.accounts).toBe(false);
+    },
+  );
+  it.each(["ios", "android"])(
+    "rejects production development configuration on %s",
     async (os) => {
       const { createNativeFirstPartyClient } = await load(os);
       expect(() =>
         createNativeFirstPartyClient({
-          ...simulator,
+          ...developmentConfig,
           environment: "production",
         }),
       ).toThrow(expect.objectContaining({ code: "invalid_configuration" }));
@@ -177,7 +192,7 @@ describe("explicit simulator selection", () => {
       const { createNativeFirstPartyClient } = await load("ios");
       const create = () =>
         createNativeFirstPartyClient({
-          ...simulator,
+          ...developmentConfig,
           issuer,
           allowInsecureLoopback,
         });
@@ -211,25 +226,8 @@ function nativeTestModules() {
       ),
     ),
   };
-  const simulator = {
-    prepareDpop: vi.fn(() =>
-      Promise.reject(
-        Object.assign(new Error("private details"), {
-          code: "simulator_unavailable",
-        }),
-      ),
-    ),
-    getOrCreateKey: vi.fn(() =>
-      Promise.reject(
-        Object.assign(new Error("private details"), {
-          code: "simulator_unavailable",
-        }),
-      ),
-    ),
-  };
   return {
     hardware,
-    simulator,
     modules: {
       DeviceAttestationSessionVault: nativeVault,
       DeviceAttestationFirstPartyTransport: {
@@ -239,7 +237,6 @@ function nativeTestModules() {
           Promise.resolve(randomBytes(32).toString("base64url")),
       },
       DeviceAttestationAppAttest: hardware,
-      DeviceAttestationIOSSimulator: simulator,
     },
   };
 }
@@ -258,7 +255,7 @@ it("never falls back after hardware failure and keeps catalogs separate even wit
   const hardware = createNativeFirstPartyClient(settings);
   const development = createNativeFirstPartyClient({
     ...settings,
-    ios: { provider: "ios-simulator" },
+    provider: "development",
   });
   const account = await hardware.accounts.create();
   expect(await development.accounts.list()).toEqual([]);
@@ -266,20 +263,9 @@ it("never falls back after hardware failure and keeps catalogs separate even wit
     code: "app_attest_unavailable",
   });
   expect(f.hardware.getOrCreateKey).toHaveBeenCalledOnce();
-  expect(f.simulator.getOrCreateKey).not.toHaveBeenCalled();
-  const simulatorAccount = await development.accounts.create();
-  expect(simulatorAccount.slotId).not.toBe(account.slotId);
-  await expect(
-    development.start(simulatorAccount.slotId),
-  ).rejects.toMatchObject({ code: "simulator_unavailable" });
-  expect(f.hardware.getOrCreateKey).toHaveBeenCalledOnce();
-  if (!("importIOSKeys" in development.accounts))
-    throw new Error("expected iOS client");
-  await expect(
-    development.accounts.importIOSKeys({
-      keyIdStoragePrefix: "legacy",
-      credentialScope: "scope",
-      dpopAlias: "alias",
-    }),
-  ).rejects.toMatchObject({ code: "invalid_configuration" });
+  const developmentAccount = await development.accounts.create();
+  expect(developmentAccount.slotId).not.toBe(account.slotId);
+  expect(await hardware.accounts.list()).toHaveLength(1);
+  expect(await development.accounts.list()).toHaveLength(1);
+  expect("importIOSKeys" in development.accounts).toBe(false);
 });

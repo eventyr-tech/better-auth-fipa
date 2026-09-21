@@ -79,8 +79,8 @@ enum FirstPartyDpopKey {
     let key = try existing(alias: alias)
     return try proof(key: key, expectedThumbprint: expectedThumbprint, url: url, method: method, accessToken: accessToken, nonce: nonce)
   }
-  /// Shared encoding for hardware keys and the explicitly selected simulator
-  /// module. The hardware bridge uses only the Secure Enclave alias overload.
+  /// Encoding helper for deterministic software-key tests. The bridge only calls
+  /// the alias overload above, which enforces an existing Secure Enclave key.
   static func proof(key: SecKey, expectedThumbprint: String, url: String, method: String,
                     accessToken: String?, nonce: String?) throws -> String {
     let jwk = try publicJwk(key)

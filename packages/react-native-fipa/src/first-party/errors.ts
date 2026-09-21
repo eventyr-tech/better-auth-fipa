@@ -2,7 +2,6 @@ export type FirstPartyErrorCode =
   | "cancelled"
   | "operation_failed"
   | "app_attest_unavailable"
-  | "simulator_unavailable"
   | "key_unavailable"
   | "key_locked"
   | "key_invalid_input"
@@ -42,13 +41,13 @@ export class FirstPartyClientError extends Error {
   ) {
     super(
       code === "app_attest_unavailable"
-        ? "App Attest is unavailable on this runtime. For iOS Simulator, explicitly configure the development simulator provider on both client and server."
-        : code === "simulator_unavailable"
-          ? "The development simulator provider requires an iOS Simulator runtime."
-          : code === "key_unavailable"
-            ? "Native signing keys are unavailable. On iOS Simulator, explicitly select the development simulator provider on both client and server."
-            : code === "invalid_configuration"
-              ? "Check the provider, environment and transport configuration. Simulator mode requires development; local HTTP requires allowInsecureLoopback."
+        ? "App Attest is unavailable on this runtime. For iOS Simulator, explicitly configure the development provider on both client and server."
+        : code === "key_unavailable"
+          ? "Signing keys are unavailable. For simulated environments, explicitly select the development provider on both client and server."
+          : code === "invalid_configuration"
+            ? "Check the provider, environment and transport configuration. The development provider requires environment: development; local HTTP requires allowInsecureLoopback."
+            : code === "vault_unavailable"
+              ? "Session storage is unavailable. Rebuild the app with the SDK native modules and the AsyncStorage peer dependency for development mode."
               : "The authentication operation could not be completed.",
     );
   }

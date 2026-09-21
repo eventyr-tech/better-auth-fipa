@@ -144,12 +144,15 @@ succeeds and the other fails, finish the missing publication without attempting
 to republish or overwrite the successful version. Announce the pair only after
 the registry verification succeeds.
 
-For simulator-provider changes, boot a dedicated iOS Simulator and run
-`FIPA_SIMULATOR_UDID=<device-uuid> pnpm verify:ios-simulator`. This installs a
-small native test app, verifies simulator evidence with the real server
-provider, checks DPoP signatures, preserves Keychain keys/vault data across app
-relaunch, checks hardware-key separation and removes the test app afterward. It
-uses software keys and does not certify physical-device App Attest or React
-Native UI flows. The TypeScript integration suite covers the public SDK
-composition and real Better Auth password/OTP/token/resource/lifecycle endpoints
-with native test ports.
+For development-provider changes, run the shared TypeScript integration suite.
+It exercises the real software evidence/DPoP implementation against Better Auth
+password, OTP, token, resource and lifecycle endpoints for both platform
+selections. Its native vault and transport ports are test doubles; recreating
+the client verifies persisted-state recovery, not an actual device process
+relaunch.
+
+Consumer development authentication and plugin release verification are
+distinct. Keep the native iOS/Android package, storage, transport and signed
+physical-device attestation checks in the release lifecycle. Software-provider
+tests do not certify App Attest, Play Integrity, hardware key storage or native
+bridges.
