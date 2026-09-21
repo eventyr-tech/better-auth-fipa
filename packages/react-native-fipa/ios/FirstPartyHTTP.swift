@@ -63,7 +63,7 @@ final class FirstPartyHTTPClient {
     }
   }
 
-  private static func request(id: String, url: String, method: String, headers: [String: String], body: String?,
+  static func request(id: String, url: String, method: String, headers: [String: String], body: String?,
                               maximumResponseBytes: Int, timeoutMilliseconds: Int,
                               allowInsecureLoopback: Bool) throws -> URLRequest {
     guard id.range(of: "^[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil,
@@ -71,7 +71,7 @@ final class FirstPartyHTTPClient {
           parts.user == nil, parts.password == nil, parts.fragment == nil,
           let host = parts.host, !host.isEmpty,
           parts.scheme == "https" || (allowInsecureLoopback && parts.scheme == "http" &&
-            ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host.lowercased())),
+            FirstPartyLocalOrigin.contains(host)),
           ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].contains(method),
           maximumResponseBytes > 0, maximumResponseBytes <= 1_048_576,
           timeoutMilliseconds >= 1000, timeoutMilliseconds <= 120_000,

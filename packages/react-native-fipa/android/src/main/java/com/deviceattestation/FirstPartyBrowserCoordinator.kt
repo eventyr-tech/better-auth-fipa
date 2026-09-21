@@ -211,8 +211,7 @@ internal class FirstPartyBrowserCoordinator(
                     (authorization.scheme == "https" ||
                         (request.allowInsecureLoopback &&
                             authorization.scheme == "http" &&
-                            authorization.host.lowercase(Locale.ROOT) in
-                                setOf("localhost", "127.0.0.1", "::1", "[::1]"))),
+                            FirstPartyLocalOrigin.contains(authorization.host))),
                 "browser_unavailable",
             )
             val scheme = callback.scheme?.lowercase(Locale.ROOT)

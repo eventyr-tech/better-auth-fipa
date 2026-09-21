@@ -257,3 +257,114 @@ store. Native transport tests use real loopback sockets, and DPoP encoding tests
 use ephemeral software keys. They do not verify physical Keychain lock/restore
 behavior or Secure Enclave key retention. Neither suite substitutes for the
 physical-device example.
+
+### Local HTTP development
+
+`createNativeFirstPartyClient` accepts the existing `allowInsecureLoopback`
+configuration option. It defaults to `false`. For Eventyr's local simulator and
+Maestro Studio setup, merge these fields into the normal client configuration:
+
+```ts
+{
+  issuer: "http://eventyr.localhost:3000/api/auth",
+  allowInsecureLoopback: __DEV__,
+}
+```
+
+With the option enabled, HTTP is accepted for `localhost`, valid DNS subdomains
+such as `eventyr.localhost` and `a.b.localhost`, and the existing `127.0.0.1`
+and `[::1]` loopback literals. Hostname checks use parsed hosts, ignore case,
+and accept one terminal DNS dot on localhost names (for example,
+`eventyr.localhost.`). Subdomain labels must contain 1–63 ASCII letters, digits,
+or internal hyphens; the full name without its terminal dot must not exceed 253
+characters. Ports such as `:3000` are supported. Empty labels, repeated terminal
+dots, `notlocalhost`, `localhost.example.com`, and `eventyr.localhost.evil.com`
+are rejected. LAN IPs and Android's `10.0.2.2` host gateway are not part of this
+exception.
+
+The policy applies to issuer/key-adapter validation, protected resource
+requests, and iOS/Android HTTP and browser authorization URL checks. Resource
+origins must still be explicitly allowed by the issuer/resources configuration.
+The terminal dot is retained in URLs: dotted and undotted names are distinct
+origins and issuer identities, so use one spelling consistently in client/server
+settings. URL credentials, native HTTP redirects, ambient cookies/credentials,
+and nonlocal HTTP remain prohibited. HTTPS certificate validation is unchanged.
+
+The option does not configure DNS, routing, or the operating system's transport
+policy. Ensure the name resolves to the intended local server from each runtime;
+on an Android device/emulator, loopback refers to that device/emulator (port
+forwarding may be needed). Keep these platform exceptions in development builds:
+
+- **iOS:** merge a scoped ATS exception into the app's generated `Info.plist`
+  (or Expo `ios.infoPlist` configuration). For the Eventyr hostname:
+
+  ```xml
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSExceptionDomains</key>
+    <dict>
+      <key>eventyr.localhost</key>
+      <dict>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
+      </dict>
+    </dict>
+  </dict>
+  ```
+
+  Use lowercase domain keys without ports. To cover all localhost subdomains,
+  use a `localhost` entry with `NSIncludesSubdomains` set to `true`. A URL with
+  a terminal dot needs a matching dotted exception entry. See Apple's
+  [ATS configuration guidance](https://developer.apple.com/documentation/security/preventing-insecure-network-connections)
+  and
+  [exception domain rules](https://developer.apple.com/documentation/bundleresources/information-property-list/nsexceptiondomains).
+
+- **Android:** merge this domain rule into a debug-only Network Security Config
+  XML resource referenced by the app manifest's
+  `android:networkSecurityConfig="@xml/network_security_config"`:
+
+  ```xml
+  <network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+      <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+  </network-security-config>
+  ```
+
+  Add explicit domain entries for loopback IPs if those are used. Prefer the
+  undotted Eventyr hostname to avoid platform-specific domain matching
+  differences. See Android's
+  [Network Security Configuration](https://developer.android.com/privacy-and-security/security-config).
+
+These app settings do not change Maestro Studio's JVM trust store. Keeping the
+local origin on HTTP avoids introducing a separate local HTTPS certificate trust
+requirement; the SDK does not bypass TLS trust on either platform.
+
+### Consuming this change in Eventyr
+
+This change belongs to `@eventyr-tech/react-native-fipa`; no server API, wire
+protocol, or native bridge signature changes are required. The boolean option is
+unchanged. Both its JavaScript and compiled native implementations must be
+updated.
+
+1. Choose the next unused SDK prerelease version after checking npm's current
+   versions/dist-tags. Update the SDK version and workspace lockfile, then run
+   the repository checks and native consumer checks. Run a package publish
+   dry-run; publish to the `alpha` tag only after explicit release
+   authorization. The server package does not require a release for this fix.
+2. In Eventyr, install that exact SDK version and commit the updated lockfile.
+   For prepublication testing, build and pack this SDK and install the resulting
+   tarball instead. Keep the existing compatible peer dependencies.
+3. Enable the option in local development and apply the scoped platform
+   transport configuration above. Preserve the existing issuer path and resource
+   settings.
+4. Regenerate native projects if managed by Expo, run CocoaPods installation for
+   iOS, then rebuild/reinstall the iOS simulator and Android development
+   binaries. Restart Metro against the updated package. A Metro reload or OTA
+   JavaScript update alone cannot replace the Swift/Kotlin checks in an existing
+   binary.
+5. Verify cold-start session restoration and authentication from
+   `http://eventyr.localhost:3000` in the simulator and Maestro Studio, plus an
+   opt-out/nonlocal HTTP rejection. This change permits local HTTP transport; it
+   does not change simulator attestation capabilities or server authentication
+   policy.

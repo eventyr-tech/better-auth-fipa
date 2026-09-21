@@ -316,16 +316,49 @@ class FirstPartyBrowserCoordinatorTest {
 
     @Test
     fun cleartextRequiresExplicitLoopbackDevelopmentOptIn() {
-        for (host in listOf("localhost", "127.0.0.1", "[::1]")) {
-            val value = request().copy(url = "http://$host/auth", allowInsecureLoopback = true)
-            val output = open(value)
-            assertEquals(value, attach().request)
-            coordinator.invalidate(owner)
-            rejected("browser_cancelled", output)
+        for (host in
+            listOf(
+                "localhost",
+                "eventyr.localhost",
+                "deep.eventyr.localhost",
+                "EVENTYR.LocalHost",
+                "localhost.",
+                "eventyr.localhost.",
+                "a-b.localhost",
+                "127.0.0.1",
+                "[::1]",
+            )) {
+            for (port in listOf("", ":3000")) {
+                val value =
+                    request().copy(url = "http://$host$port/auth", allowInsecureLoopback = true)
+                rejected("browser_unavailable", open(value.copy(allowInsecureLoopback = false)))
+                val output = open(value)
+                assertEquals(value, attach().request)
+                coordinator.invalidate(owner)
+                rejected("browser_cancelled", output)
+            }
         }
-        rejected(
-            "browser_unavailable",
-            open(request().copy(url = "http://example.com/", allowInsecureLoopback = true)),
-        )
+        for (host in
+            listOf(
+                "notlocalhost",
+                "localhost.example.com",
+                "eventyr.localhost.evil.com",
+                "evil-localhost",
+                ".localhost",
+                "a..localhost",
+                "-a.localhost",
+                "a-.localhost",
+                "a_b.localhost",
+                "localhost..",
+                "eventyr.localhost..",
+                "192.168.1.1",
+                "127.0.0.2",
+                "10.0.2.2",
+            )) {
+            rejected(
+                "browser_unavailable",
+                open(request().copy(url = "http://$host:3000/", allowInsecureLoopback = true)),
+            )
+        }
     }
 }

@@ -1,3 +1,4 @@
+import { isLocalHostname } from "./local-origin.ts";
 import { z } from "zod";
 import type {
   FirstPartyClientPorts,
@@ -76,7 +77,7 @@ export function normalizeIssuer(
         !(
           allowInsecureLoopback &&
           url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+          isLocalHostname(url.hostname)
         ))
     )
       throw new Error();
