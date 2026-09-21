@@ -2587,3 +2587,64 @@ describe("FiPA client against real Better Auth endpoints", () => {
     expect(f.ports.keys.prepare).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("local origins at the client boundary", () => {
+  it("constructs local clients and applies the same resource policy", async () => {
+    const f = await fixture();
+    for (const host of [
+      "localhost",
+      "eventyr.localhost",
+      "deep.eventyr.localhost",
+      "EVENTYR.LocalHost",
+      "localhost.",
+      "eventyr.localhost.",
+      "a-b.localhost",
+      "127.0.0.1",
+      "[::1]",
+    ]) {
+      const issuer = `http://${host}:3000/api/auth`;
+      expect(() =>
+        createFirstPartyClientCore(
+          { ...f.config, issuer, allowInsecureLoopback: false },
+          f.ports,
+        ),
+      ).toThrow(expect.objectContaining({ code: "invalid_configuration" }));
+      const client = createFirstPartyClientCore(
+        { ...f.config, issuer },
+        f.ports,
+      );
+      // Valid requests reach session lookup, even before an account exists.
+      await expect(
+        client.fetch("slot", `${issuer}/resource`),
+      ).rejects.toMatchObject({ code: "reauthentication_required" });
+    }
+    for (const host of [
+      "notlocalhost",
+      "localhost.example.com",
+      "eventyr.localhost.evil.com",
+      "evil-localhost",
+      ".localhost",
+      "a..localhost",
+      "-a.localhost",
+      "a-.localhost",
+      "a_b.localhost",
+      "localhost..",
+      "eventyr.localhost..",
+      "192.168.1.1",
+      "127.0.0.2",
+      "10.0.2.2",
+    ]) {
+      const url = `http://${host}:3000/resource`;
+      expect(() =>
+        createFirstPartyClientCore({ ...f.config, issuer: url }, f.ports),
+      ).toThrow(expect.objectContaining({ code: "invalid_configuration" }));
+      const client = createFirstPartyClientCore(
+        { ...f.config, resources: [url] },
+        f.ports,
+      );
+      await expect(client.fetch("slot", url)).rejects.toMatchObject({
+        code: "invalid_request",
+      });
+    }
+  });
+});

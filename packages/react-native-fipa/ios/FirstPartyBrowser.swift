@@ -32,7 +32,7 @@ final class FirstPartyBrowser: NSObject, ASWebAuthenticationPresentationContextP
           callback.user == nil, callback.password == nil, callback.fragment == nil,
           authorization.user == nil, authorization.password == nil, authorization.fragment == nil,
           authorization.scheme == "https" || (allowInsecureLoopback && authorization.scheme == "http" &&
-            ["localhost", "127.0.0.1", "[::1]", "::1"].contains(authorization.host ?? "")),
+            FirstPartyLocalOrigin.contains(authorization.host ?? "")),
           let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
             .filter({ $0.activationState == .foregroundActive }).flatMap({ $0.windows }).first(where: { $0.isKeyWindow })
     else { complete(.failure(.unavailable)); return }

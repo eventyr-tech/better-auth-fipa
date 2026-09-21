@@ -285,13 +285,12 @@ internal class FirstPartyHTTPClient(
                     (uri.scheme == "https" ||
                         (allowLoopback &&
                             uri.scheme == "http" &&
-                            uri.host.lowercase(Locale.ROOT) in
-                                setOf("localhost", "127.0.0.1", "::1", "[::1]"))),
+                            FirstPartyLocalOrigin.contains(uri.host))),
                 "http_invalid_request",
             )
             val ascii = URI(uri.toASCIIString())
             val expected =
-                "${ascii.scheme}://${ascii.rawAuthority}${ascii.rawPath.ifEmpty { "/" }}" +
+                "${ascii.scheme}://${ascii.rawAuthority.lowercase(Locale.ROOT)}${ascii.rawPath.ifEmpty { "/" }}" +
                     (ascii.rawQuery?.let { "?$it" } ?: "")
             val endpoint = url.toHttpUrl()
             // Reject a normalization that could change the DPoP htu target.

@@ -70,6 +70,61 @@ class FirstPartyHTTPTest {
     }
 
     @Test
+    fun localNamesReachTransportOnlyWithOptIn() {
+        val transport =
+            newClient(
+                OkHttpClient.Builder()
+                    .dns(
+                        object : okhttp3.Dns {
+                            override fun lookup(hostname: String) =
+                                listOf(java.net.InetAddress.getByName("127.0.0.1"))
+                        }
+                    )
+            )
+        for (host in
+            listOf(
+                "localhost",
+                "eventyr.localhost",
+                "deep.eventyr.localhost",
+                "EVENTYR.LocalHost",
+                "localhost.",
+                "eventyr.localhost.",
+                "a-b.localhost",
+                "127.0.0.1",
+            )) {
+            val url = "http://$host:${server.port}/token"
+            rejected(
+                "http_invalid_request",
+                send(url = url, loopback = false, transport = transport),
+            )
+            server.enqueue(MockResponse().setBody("local"))
+            assertEquals("local", result(send(url = url, transport = transport)).body)
+        }
+        for (host in
+            listOf(
+                "notlocalhost",
+                "localhost.example.com",
+                "eventyr.localhost.evil.com",
+                "evil-localhost",
+                ".localhost",
+                "a..localhost",
+                "-a.localhost",
+                "a-.localhost",
+                "a_b.localhost",
+                "localhost..",
+                "eventyr.localhost..",
+                "192.168.1.1",
+                "127.0.0.2",
+                "10.0.2.2",
+            )) {
+            rejected(
+                "http_invalid_request",
+                send(url = "http://$host:${server.port}/token", transport = transport),
+            )
+        }
+    }
+
+    @Test
     fun preservesProtocolBytesAndJSONErrorResponses() {
         server.enqueue(
             MockResponse()
@@ -277,7 +332,6 @@ class FirstPartyHTTPTest {
                 "https://localhost/#fragment",
                 "https://localhost/a/../token",
                 "https://localhost:0/token",
-                "https://LOCALHOST/token",
                 "https://localhost\\@evil.example/",
             )) rejected("http_invalid_request", send(url = url))
         rejected("http_invalid_request", send(loopback = false))

@@ -1,3 +1,4 @@
+import { isLocalHostname } from "./local-origin.ts";
 import { digest, identifier } from "./identity.ts";
 import {
   normalizeIssuer,
@@ -213,6 +214,7 @@ export interface FirstPartyClientConfiguration {
   scopes: string[];
   resources: string[];
   accessibility?: "when-unlocked" | "after-first-unlock";
+  /** Development only: allow HTTP on localhost, valid .localhost names and loopback literals. Defaults to false. */
   allowInsecureLoopback?: boolean;
   browser?: { redirectUri: string };
 }
@@ -765,7 +767,7 @@ export function createFirstPartyClientCore(
           !(
             config.allowInsecureLoopback &&
             target.protocol === "http:" &&
-            ["localhost", "127.0.0.1", "[::1]"].includes(target.hostname)
+            isLocalHostname(target.hostname)
           ))
       )
         throw new Error();
