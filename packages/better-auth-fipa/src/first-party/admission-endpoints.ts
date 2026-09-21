@@ -1,3 +1,4 @@
+import { developmentPolicyAllowed } from "../development.js";
 import { isAndroidHardwareProvider } from "../android/provider.js";
 import {
   createAndroidKeyChallenge,
@@ -32,6 +33,14 @@ const verification = z.strictObject({
 export function createNativeAdmissionEndpoints(
   applications: readonly NativeApplicationPolicy[],
 ) {
+  if (
+    applications.some(
+      (app) => !developmentPolicyAllowed(app.provider, app.environment),
+    )
+  )
+    throw new TypeError(
+      "The development provider requires development admission configuration.",
+    );
   const clients = new Map(applications.map((app) => [app.clientId, app]));
   if (!clients.size || clients.size !== applications.length)
     throw new TypeError(

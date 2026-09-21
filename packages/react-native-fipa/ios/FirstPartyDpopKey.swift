@@ -48,6 +48,10 @@ enum FirstPartyDpopKey {
     }
   }
   static func prepare(alias: String) throws -> String {
+#if targetEnvironment(simulator)
+    // Hardware composition never falls back to simulator software keys.
+    throw FirstPartyKeyError.unavailable
+#else
     lock.lock(); defer { lock.unlock() }
     do { return try inspect(alias: alias) }
     catch FirstPartyKeyError.missing { /* Only an authoritative absent item permits creation. */ }
@@ -67,6 +71,7 @@ enum FirstPartyDpopKey {
     // permission to rotate a key that another runtime may already be using.
     guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else { throw FirstPartyKeyError.failed }
     return try thumbprint(publicJwk(key))
+#endif
   }
 
   static func proof(alias: String, expectedThumbprint: String, url: String, method: String,

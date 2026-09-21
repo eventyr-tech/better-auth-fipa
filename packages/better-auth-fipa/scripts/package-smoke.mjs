@@ -80,6 +80,7 @@ try {
       "--eval",
       [
         'const native = await import("@eventyr-tech/better-auth-fipa/first-party");',
+        'if (typeof native.developmentProvider !== "function") throw new TypeError("Missing development provider export");',
         'if (typeof native.androidHardware !== "function") throw new TypeError("Missing Android provider export");',
         'if (typeof native.resolveFirstPartyTokenContext !== "function") throw new TypeError("Missing first-party claims resolver export");',
         'if (typeof native.createNativeFirstPartyPlugin !== "function" || typeof native.requireNativeAccess !== "function") throw new TypeError("Missing first-party exports");',

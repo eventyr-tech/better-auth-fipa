@@ -450,3 +450,106 @@ request bodies in issues or fixtures.
 ## License
 
 [MIT](LICENSE)
+
+### Opt-in shared development server provider (development only)
+
+`0.1.0-alpha.1` adds `developmentProvider` to the public `/first-party` entry
+point for `@eventyr-tech/react-native-fipa@0.1.0-alpha.2` clients. It uses the
+same registration, native admission, password/email-OTP, DPoP token, resource
+and lifecycle endpoints. It does not redirect native authentication through
+legacy device-code pairing.
+
+```ts
+import { createDeviceAttestation } from "@eventyr-tech/better-auth-fipa";
+import {
+  developmentProvider,
+  createNativeFirstPartyPlugin,
+} from "@eventyr-tech/better-auth-fipa/first-party";
+
+// Execute only in your explicitly selected local/development server composition.
+const development = developmentProvider({
+  enabled: true,
+  authorize: () =>
+    process.env.FIPA_DEPLOYMENT === "local-e2e" &&
+    process.env.FIPA_ALLOW_DEVELOPMENT_AUTH === "true",
+  environment: "development",
+  applicationIds: ["io.eventyr.mobile"],
+});
+const device = createDeviceAttestation({
+  providers: [development],
+  purposes: {
+    credentialRegistration: {},
+    oauthAuthorization: {
+      protectedClientIds: ["eventyr-development"],
+      requireDpopJkt: true,
+    },
+  },
+});
+const applications = [
+  {
+    clientId: "eventyr-development",
+    provider: development,
+    applicationId: "io.eventyr.mobile",
+    environment: "development" as const,
+    scopes: ["offline_access"],
+    resources: [],
+  },
+];
+// Supply applications to your existing NativeTokenOptions and install
+// device.serverPlugin, the OAuth provider and createNativeFirstPartyPlugin(options).
+// Pass the SAME options to requireNativeAccess. Keep explicit lifetime policies,
+// the email-otp plugin/delivery configuration, and real database transactions.
+```
+
+Register that separate public OAuth client with the normal native grant/scopes
+policy. The matching client must explicitly select `provider: "development"` and
+`environment: "development"`. Continue to protect resources with
+`requireNativeAccess`; a generic JWT or cookie check does not enforce FiPA's
+current provider policy. The server does not need a new schema migration for
+this provider; existing credential rows are keyed by provider/application/key
+identity.
+
+The evidence is a challenge-bound signature by a **software key**. It does not
+prove Apple App Attest, a genuine application, physical-device integrity or
+Secure Enclave possession. Assurance retains provider `development` and
+environment `development`, never `app-attest`. The shared one-time challenge and
+database counter CAS prevent replay; its server counter is not an Apple hardware
+counter.
+
+The factory requires `enabled: true`, `environment: "development"`, an
+application allowlist, and an explicit server-owned `authorize: () => boolean`
+policy. The example uses host-defined environment variables; these names are not
+read by the SDK. Set `FIPA_DEPLOYMENT=local-e2e` and
+`FIPA_ALLOW_DEVELOPMENT_AUTH=true` only in the authorized local E2E server.
+**Keep Next.js production builds and `NODE_ENV=production` unchanged.** Build
+mode does not determine whether the host authorizes development authentication.
+
+The callback must return exactly `true`. Missing authorization, `false`, or a
+thrown exception fails closed. It is checked at construction, registration,
+admission, token issuance/refresh and protected resource access, so revoking
+host authorization also rejects previously issued development credentials. Use
+the same provider instance in registration and native application policies;
+copying/spreading the provider does not transfer authorization. Keep the
+callback synchronous, side-effect-free and based on trusted server deployment
+settings, never a request header, client evidence or public frontend
+configuration.
+
+The credential environment remains `development`, even when `NODE_ENV` is
+`production`. Hardware/production credential policies still reject this
+provider. Removing/replacing the native application policy also invalidates
+development token authority. Hardware and development credentials cannot be
+substituted.
+
+**The host must deny development authentication in production deployments**, and
+should omit the provider there entirely. For example, set `FIPA_DEPLOYMENT` to
+`production` and leave the allow flag unset; the callback above denies even if
+someone accidentally includes the provider. Use a separate E2E OAuth client and
+server/database. There is no client runtime eligibility restriction: software
+evidence cannot establish that a caller is a simulator. The host deployment
+policy is the authorization boundary.
+
+Keep existing legacy providers and rollout policies in their existing
+composition; adding the shared development provider does not migrate or replace
+legacy device-code pairing. Profile/password setup and the decision to return an
+OTP-authenticated existing-password account to native password login remain host
+application policy.

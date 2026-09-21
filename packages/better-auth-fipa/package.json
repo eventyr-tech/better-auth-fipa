@@ -1,6 +1,6 @@
 {
   "name": "@eventyr-tech/better-auth-fipa",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Attested first-party authentication for native iOS and Android apps, powered by Better Auth.",
   "type": "module",
   "sideEffects": [

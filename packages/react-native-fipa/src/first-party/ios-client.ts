@@ -36,7 +36,7 @@ export function createIOSFirstPartyClient(
     native,
     ({ aliases, send }) =>
       createIOSKeyPorts(
-        { ...config, keyIdStoragePrefix, aliases },
+        { ...config, provider: "app-attest", keyIdStoragePrefix, aliases },
         {
           appAttest: native.appAttest,
           dpop: native.transport,

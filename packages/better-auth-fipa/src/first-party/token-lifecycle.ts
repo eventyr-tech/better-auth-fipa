@@ -1,3 +1,4 @@
+import { developmentPolicyAllowed } from "../development.js";
 import { requireUserSecurity } from "./user-security.js";
 import type { GenericEndpointContext } from "@better-auth/core";
 import {
@@ -934,6 +935,7 @@ function checkPolicy(
     throw invalidGrant();
   if (
     !application ||
+    !developmentPolicyAllowed(application.provider, application.environment) ||
     family.assurance.provider !== application.provider.id ||
     family.assurance.applicationId !== application.applicationId ||
     family.assurance.environment !== application.environment ||

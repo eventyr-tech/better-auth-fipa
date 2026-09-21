@@ -24,7 +24,7 @@ bypass or a promise of native MFA support.
 ## Installation
 
 ```sh
-pnpm add --save-exact @eventyr-tech/react-native-fipa@alpha react-native-dpop@1.0.0
+pnpm add --save-exact @eventyr-tech/react-native-fipa@alpha react-native-dpop@1.0.0 @react-native-async-storage/async-storage@2.2.0
 ```
 
 Use this client with `@eventyr-tech/better-auth-fipa` on the server.
@@ -368,3 +368,91 @@ updated.
    opt-out/nonlocal HTTP rejection. This change permits local HTTP transport; it
    does not change simulator attestation capabilities or server authentication
    policy.
+
+### Explicit development provider (iOS and Android)
+
+`0.1.0-alpha.2` adds one shared TypeScript development provider for iOS
+Simulator and Android emulators, with matching server support in
+`@eventyr-tech/better-auth-fipa@0.1.0-alpha.1`. Consumers use the same public
+client and authentication APIs on either platform:
+
+```ts
+import { createNativeFirstPartyClient } from "@eventyr-tech/react-native-fipa/first-party";
+
+const fipa = createNativeFirstPartyClient({
+  issuer: "http://eventyr.localhost:3000/api/auth",
+  clientId: "eventyr-development", // separately registered development OAuth client
+  applicationId: "io.eventyr.mobile",
+  environment: "development",
+  provider: "development", // explicit opt-in; default is hardware
+  allowInsecureLoopback: true,
+  scopes: ["offline_access"],
+  resources: [],
+});
+const account = await fipa.accounts.create();
+const next = await fipa.start(account.slotId);
+// Render next.step and use fipa.respond for password or email OTP as usual.
+```
+
+Configure the server's `developmentProvider` as described in the server README.
+Both opt-ins are required, including the server's host-controlled `authorize()`
+policy. A production-built local E2E server may keep `NODE_ENV=production`;
+credential environment remains `development`. Setting only
+`environment: "development"` does not select software evidence. Android
+cloud-project/Play Integrity configuration is not required for this provider.
+Hardware attestation failures never select it automatically. There is
+deliberately no simulator detection: explicit development mode also works on
+development devices. It never grants hardware assurance.
+
+The SDK owns software P-256 keys, evidence, DPoP signing, persistence,
+transport, account catalog, leases, session rotation and cleanup. Evidence and
+signing use one TypeScript implementation on both platforms. Keys are accessible
+to JavaScript and stored with development sessions in an **unencrypted
+AsyncStorage** namespace. Use test accounts and test data. Catalog namespaces
+include provider and environment even with a custom `storageNamespace`. Hardware
+retained-key import is unavailable in this mode. Consumers do not provide
+crypto/storage adapters or implement another client.
+
+This remains a React Native SDK: its existing random-number and HTTP transport
+module and the AsyncStorage peer must be installed in the app. Add
+`@react-native-async-storage/async-storage@2.2.0` as a direct app dependency,
+run pod install on iOS, and rebuild. Development mode does not use the
+hardware-backed session vault, add a FiPA development native module, or require
+browser/Web Crypto APIs. A plain Node/browser test runner without these modules
+is not a supported public client runtime.
+
+The development vault supports one JavaScript runtime per installation;
+concurrent headless runtimes sharing its storage are unsupported. Interrupted
+operations retain lease fencing and recover after the lease expires (normally 30
+seconds).
+
+Development evidence proves software-key possession, not genuine-app identity,
+App Attest, Play Integrity, Secure Enclave or hardware-backed Android keys. Use
+separate OAuth client IDs and development servers/databases. **Omit the server
+development provider from hosted production.** The server opt-in is the trust
+boundary; software evidence cannot establish that a caller is a simulator.
+
+`allowInsecureLoopback` remains independent and defaults to false. HTTP is
+allowed only for loopback addresses, `localhost`, and `*.localhost` (including
+`eventyr.localhost`), never arbitrary remote HTTP origins. Development mode does
+not relax HTTPS or enable browser authentication.
+
+The existing password/email-OTP, `fetch`, `restore`, `logout`, `cancel` and
+account lifecycle APIs are unchanged. On relaunch, call `accounts.list()` and
+`restore` for a saved slot. Never persist passwords or OTPs yourself. Permanent
+native failures now retain actionable `FirstPartyClientError.code` values:
+`app_attest_unavailable`, `key_unavailable`, `key_locked` and
+`key_invalid_input`. `invalid_configuration` covers incompatible provider,
+environment and transport configuration. Errors contain no original native
+exception, password, OTP, token or proof. Missing keys still require
+registration recovery; unknown native failures remain `operation_failed`.
+
+FiPA establishes authentication; Eventyr owns onboarding. After successful
+native email OTP, use `fipa.fetch` to check the account's password status. For
+an existing password, `logout` the OTP session and display native password login
+with the email prefilled. For a new account, collect name/password once in-app,
+submit the host's protected setup operation, end the OTP session as required by
+the host's security policy, and authenticate using that same just-entered
+password in memory. Do not ask for it a second time or persist it. No external
+browser or legacy device-code pairing is needed for these native flows. Existing
+legacy rollout APIs remain available and unchanged.

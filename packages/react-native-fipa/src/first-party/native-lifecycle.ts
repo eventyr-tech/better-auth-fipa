@@ -17,6 +17,8 @@ export type NativeFirstPartyConfiguration = Omit<
   "provider" | "storageNamespace" | "accessibility"
 > & {
   storageNamespace?: string;
+  /** Explicit software evidence for development on either platform; never a fallback. */
+  provider?: "hardware" | "development";
   /** Required on Android; never selects a software-key fallback. */
   android?: { cloudProjectNumber: string; securityLevel: "tee" | "strongbox" };
 };

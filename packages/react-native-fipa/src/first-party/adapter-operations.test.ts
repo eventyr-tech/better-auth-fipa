@@ -53,3 +53,22 @@ it("normalizes transport failures while retaining invalid-response errors", asyn
     ).rejects.toMatchObject({ code: expected });
   }
 });
+
+it.each([
+  "app_attest_unavailable",
+  "key_unavailable",
+  "key_locked",
+  "key_invalid_input",
+] as const)(
+  "preserves actionable %s without secret native details",
+  async (code) => {
+    const error = await nativeOperation(() =>
+      Promise.reject(
+        Object.assign(new Error("password otp token proof"), { code }),
+      ),
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FirstPartyClientError);
+    expect(error).toMatchObject({ code });
+    expect(JSON.stringify(error)).not.toContain("password otp token proof");
+  },
+);

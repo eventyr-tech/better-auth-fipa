@@ -1,3 +1,5 @@
+import { createDevelopmentVault } from "./development-vault.ts";
+import { createDevelopmentFirstPartyClient } from "./development-client.ts";
 import { Platform } from "react-native";
 import Integrity from "../NativeAndroidIntegrity.ts";
 import Recovery from "../NativeAndroidVaultRecovery.ts";
@@ -12,7 +14,27 @@ import type { NativeFirstPartyConfiguration } from "./native-lifecycle.ts";
 /** Native platform selection. Signed-device release certification remains required. */
 export function createNativeFirstPartyClient(
   config: NativeFirstPartyConfiguration,
-) {
+):
+  | ReturnType<typeof createDevelopmentFirstPartyClient>
+  | ReturnType<typeof createIOSFirstPartyClient>
+  | ReturnType<typeof createAndroidFirstPartyClient> {
+  if (
+    config.provider !== undefined &&
+    !["hardware", "development"].includes(config.provider)
+  )
+    throw new FirstPartyClientError("invalid_configuration");
+  if (config.provider === "development") {
+    if (config.environment !== "development")
+      throw new FirstPartyClientError("invalid_configuration");
+    if (!["ios", "android"].includes(Platform.OS))
+      throw new FirstPartyClientError("unsupported_platform");
+    if (!Transport) throw new FirstPartyClientError("native_unavailable");
+    const transport = Transport;
+    return createDevelopmentFirstPartyClient(config, {
+      transport,
+      vault: createDevelopmentVault(() => transport.randomToken()),
+    });
+  }
   if (Platform.OS === "android") {
     if (config.environment !== "production" || !config.android)
       throw new FirstPartyClientError("invalid_configuration");

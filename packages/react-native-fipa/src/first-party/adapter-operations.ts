@@ -57,6 +57,14 @@ export async function nativeOperation<T>(
   } catch (error) {
     checkCancelled(signal);
     if (error instanceof FirstPartyClientError) throw error;
+    const permanent = code(error);
+    if (
+      permanent === "app_attest_unavailable" ||
+      permanent === "key_unavailable" ||
+      permanent === "key_locked" ||
+      permanent === "key_invalid_input"
+    )
+      throw new FirstPartyClientError(permanent);
     if (code(error) === "key_missing")
       throw new FirstPartyClientError("registration_recovery_required");
     throw new FirstPartyClientError("operation_failed");

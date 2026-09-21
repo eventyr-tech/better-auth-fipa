@@ -1,6 +1,10 @@
 export type FirstPartyErrorCode =
   | "cancelled"
   | "operation_failed"
+  | "app_attest_unavailable"
+  | "key_unavailable"
+  | "key_locked"
+  | "key_invalid_input"
   | "invalid_configuration"
   | "invalid_state"
   | "invalid_request"
@@ -35,7 +39,17 @@ export class FirstPartyClientError extends Error {
     readonly cleanup?: "complete" | "not-owned" | "uncertain",
     readonly remoteCleanup?: "confirmed" | "unconfirmed",
   ) {
-    super("The authentication operation could not be completed.");
+    super(
+      code === "app_attest_unavailable"
+        ? "App Attest is unavailable on this runtime. For iOS Simulator, explicitly configure the development provider on both client and server."
+        : code === "key_unavailable"
+          ? "Signing keys are unavailable. For simulated environments, explicitly select the development provider on both client and server."
+          : code === "invalid_configuration"
+            ? "Check the provider, environment and transport configuration. The development provider requires environment: development; local HTTP requires allowInsecureLoopback."
+            : code === "vault_unavailable"
+              ? "Session storage is unavailable. Rebuild the app with the SDK native modules and the AsyncStorage peer dependency for development mode."
+              : "The authentication operation could not be completed.",
+    );
   }
 }
 
