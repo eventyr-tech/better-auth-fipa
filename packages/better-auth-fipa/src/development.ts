@@ -6,14 +6,25 @@ import type { DeviceAttestationProvider } from "./types.js";
 
 export const DEVELOPMENT_PROVIDER = "development";
 
-/** Additional fail-closed guard; hosts must omit this provider from production. */
+// Keep authorization attached to the actual server provider, never to client
+// evidence or a provider name supplied by the caller.
+const authorizations = new WeakMap<object, () => boolean>();
+function authorized(authorize: (() => boolean) | undefined): boolean {
+  try {
+    return authorize?.() === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Deployment policy is independent of the server's build/runtime mode. */
 export function developmentPolicyAllowed(
-  provider: string,
+  provider: { readonly id: string },
   environment: string,
 ) {
   return (
-    provider !== DEVELOPMENT_PROVIDER ||
-    (environment === "development" && process.env.NODE_ENV !== "production")
+    provider.id !== DEVELOPMENT_PROVIDER ||
+    (environment === "development" && authorized(authorizations.get(provider)))
   );
 }
 
@@ -31,26 +42,31 @@ const envelope = z.strictObject({
 });
 
 /** Development proof of software-key possession, NOT hardware/app attestation.
- * Omit from hosted production, even when NODE_ENV is not set to production. */
+ * The host must authorize its deployment explicitly; NODE_ENV is irrelevant. */
 export function developmentProvider(options: {
   enabled: true;
+  /** Server-owned deployment policy, rechecked at every authorization boundary.
+   * Must return exactly true; false, missing callbacks and exceptions deny access. */
+  authorize: () => boolean;
   environment: "development";
   applicationIds: readonly string[];
 }): DeviceAttestationProvider {
   if (
     options.enabled !== true ||
-    !developmentPolicyAllowed(DEVELOPMENT_PROVIDER, options.environment) ||
+    options.environment !== "development" ||
+    !authorized(options.authorize) ||
     !options.applicationIds.length ||
     new Set(options.applicationIds).size !== options.applicationIds.length ||
     options.applicationIds.some((id) => !id || id.length > 256)
   )
     throw new TypeError(
-      "The development provider requires explicit development opt-in and unique application IDs; omit it from production.",
+      "The development provider requires explicit opt-in, host authorization, development environment and unique application IDs; omit it from production.",
     );
+  const authorize = options.authorize;
   const applications = new Set(options.applicationIds);
   const eligible = (applicationId?: string) => {
     if (
-      !developmentPolicyAllowed(DEVELOPMENT_PROVIDER, "development") ||
+      !authorized(authorize) ||
       (applicationId !== undefined && !applications.has(applicationId))
     )
       throw rejection("platform-policy", "development_not_allowed");
@@ -100,7 +116,7 @@ export function developmentProvider(options: {
       throw rejection("signature", "invalid_development_evidence");
     }
   }
-  return {
+  const provider: DeviceAttestationProvider = {
     id: DEVELOPMENT_PROVIDER,
     maxEvidenceBytes: 4096,
     decodeKeyId,
@@ -135,4 +151,6 @@ export function developmentProvider(options: {
         };
       }),
   };
+  authorizations.set(provider, authorize);
+  return provider;
 }

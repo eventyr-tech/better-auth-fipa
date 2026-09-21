@@ -248,7 +248,7 @@ export async function consumeNativeAdmission<T>(
     if (
       (receipt.expiresAt !== undefined &&
         new Date(receipt.expiresAt) <= new Date()) ||
-      !developmentPolicyAllowed(policy.provider.id, policy.environment) ||
+      !developmentPolicyAllowed(policy.provider, policy.environment) ||
       (isAndroidHardwareProvider(policy.provider) &&
         (!receipt.expiresAt || !receipt.evidence)) ||
       !equalBytes(bindingHash, Buffer.from(receipt.bindingHash, "base64url")) ||
@@ -280,7 +280,7 @@ export function requireNativeApplicationPolicy(
 ): NativeAdmissionBinding {
   const binding = normalizeNativeAdmissionBinding(input);
   if (
-    !developmentPolicyAllowed(policy.provider.id, policy.environment) ||
+    !developmentPolicyAllowed(policy.provider, policy.environment) ||
     (isAndroidHardwareProvider(policy.provider) &&
       (policy.applicationId !== policy.provider.applicationId ||
         policy.environment !== "production")) ||

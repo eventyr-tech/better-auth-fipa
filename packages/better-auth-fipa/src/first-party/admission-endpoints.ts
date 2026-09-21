@@ -35,7 +35,7 @@ export function createNativeAdmissionEndpoints(
 ) {
   if (
     applications.some(
-      (app) => !developmentPolicyAllowed(app.provider.id, app.environment),
+      (app) => !developmentPolicyAllowed(app.provider, app.environment),
     )
   )
     throw new TypeError(

@@ -5,19 +5,23 @@ import {
   sign,
 } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import { developmentProvider } from "./development.js";
+import {
+  developmentProvider,
+  developmentPolicyAllowed,
+} from "./development.js";
 import { appAttest } from "./app-attest/provider.js";
 import type { StoredAttestationCredential } from "./types.js";
 import { createNativeAdmissionEndpoints } from "./first-party/admission-endpoints.js";
 
 const options = {
   enabled: true,
+  authorize: () => true,
   environment: "development",
   applicationIds: ["TEAM.app"],
 } as const;
 afterEach(() => vi.unstubAllEnvs());
-function fixture() {
-  const provider = developmentProvider(options);
+function fixture(authorize = () => true) {
+  const provider = developmentProvider({ ...options, authorize });
   const { publicKey, privateKey } = generateKeyPairSync("ec", {
     namedCurve: "prime256v1",
   });
@@ -56,24 +60,32 @@ function fixture() {
   };
   return { provider, keyId, clientDataHash, evidence, credential };
 }
-it("accepts only separately identified software proof of possession", async () => {
-  const f = fixture();
-  expect(
-    await f.provider.verifyRegistration({
-      ...f,
-      applicationId: "TEAM.app",
-      evidence: f.evidence("register"),
-    }),
-  ).toMatchObject({
-    environment: "development",
-    counter: 0,
-    publicKey: f.credential.publicKey,
-  });
-  expect(
-    await f.provider.verifyAssertion({ ...f, evidence: f.evidence("assert") }),
-  ).toEqual({ counter: 1, extensionsPresent: false });
-});
-it("fails closed without explicit opt-in or in production", () => {
+it.each(["development", "production"])(
+  "accepts authorized software evidence with NODE_ENV=%s",
+  async (mode) => {
+    vi.stubEnv("NODE_ENV", mode);
+    const f = fixture();
+    expect(
+      await f.provider.verifyRegistration({
+        ...f,
+        applicationId: "TEAM.app",
+        evidence: f.evidence("register"),
+      }),
+    ).toMatchObject({
+      environment: "development",
+      counter: 0,
+      publicKey: f.credential.publicKey,
+    });
+    expect(
+      await f.provider.verifyAssertion({
+        ...f,
+        evidence: f.evidence("assert"),
+      }),
+    ).toEqual({ counter: 1, extensionsPresent: false });
+  },
+);
+it("fails closed without explicit opt-in, host authorization or development credentials", () => {
+  vi.stubEnv("NODE_ENV", "production");
   expect(() =>
     developmentProvider({ ...options, enabled: false as unknown as true }),
   ).toThrow();
@@ -83,12 +95,26 @@ it("fails closed without explicit opt-in or in production", () => {
       environment: "production" as "development",
     }),
   ).toThrow();
-  vi.stubEnv("NODE_ENV", "production");
-  expect(() => developmentProvider(options)).toThrow();
+  expect(() =>
+    developmentProvider({ ...options, authorize: () => false }),
+  ).toThrow();
+  expect(() =>
+    developmentProvider({ ...options, authorize: undefined as never }),
+  ).toThrow();
+  expect(() =>
+    developmentProvider({
+      ...options,
+      authorize: () => {
+        throw new Error("policy unavailable");
+      },
+    }),
+  ).toThrow();
 });
-it("rejects runtime production registration and assertion even for an earlier factory", async () => {
-  const f = fixture();
+it("rejects registration and assertion after deployment authorization is revoked", async () => {
   vi.stubEnv("NODE_ENV", "production");
+  let allowed = true;
+  const f = fixture(() => allowed);
+  allowed = false;
   expect(() => f.provider.decodeKeyId(f.keyId.toString("base64"))).toThrow();
   await expect(
     f.provider.verifyRegistration({
@@ -163,4 +189,18 @@ it("development evidence cannot register with App Attest", async () => {
       evidence: f.evidence("register"),
     }),
   ).rejects.toThrow();
+});
+
+it("fails closed for unauthorized provider copies and policy callback errors", () => {
+  let denied = false;
+  const f = fixture(() => {
+    if (denied) throw new Error("host policy failed");
+    return true;
+  });
+  expect(developmentPolicyAllowed(f.provider, "development")).toBe(true);
+  expect(developmentPolicyAllowed({ ...f.provider }, "development")).toBe(
+    false,
+  );
+  denied = true;
+  expect(developmentPolicyAllowed(f.provider, "development")).toBe(false);
 });

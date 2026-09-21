@@ -469,6 +469,9 @@ import {
 // Execute only in your explicitly selected local/development server composition.
 const development = developmentProvider({
   enabled: true,
+  authorize: () =>
+    process.env.FIPA_DEPLOYMENT === "local-e2e" &&
+    process.env.FIPA_ALLOW_DEVELOPMENT_AUTH === "true",
   environment: "development",
   applicationIds: ["io.eventyr.mobile"],
 });
@@ -513,21 +516,37 @@ environment `development`, never `app-attest`. The shared one-time challenge and
 database counter CAS prevent replay; its server counter is not an Apple hardware
 counter.
 
-The factory requires `enabled: true`, a development environment and an
-application allowlist. Production native policies reject it.
-`NODE_ENV=production` additionally rejects construction, registration,
-admission, token issuance/refresh and protected resource access.
-Removing/replacing the native application policy also invalidates development
-token authority. App Attest cannot verify development evidence, and hardware and
-development credentials cannot be substituted across policies.
+The factory requires `enabled: true`, `environment: "development"`, an
+application allowlist, and an explicit server-owned `authorize: () => boolean`
+policy. The example uses host-defined environment variables; these names are not
+read by the SDK. Set `FIPA_DEPLOYMENT=local-e2e` and
+`FIPA_ALLOW_DEVELOPMENT_AUTH=true` only in the authorized local E2E server.
+**Keep Next.js production builds and `NODE_ENV=production` unchanged.** Build
+mode does not determine whether the host authorizes development authentication.
 
-**The host application must omit this provider from hosted production**,
-including production deployments whose `NODE_ENV` is absent or misconfigured.
-Use a separate development OAuth client and server/database. There is no client
-runtime eligibility restriction: the same TypeScript provider serves iOS
-simulators, Android emulators and development devices. A client cannot establish
-its runtime authenticity using software evidence. Production safety depends on
-explicit server composition and provider policy.
+The callback must return exactly `true`. Missing authorization, `false`, or a
+thrown exception fails closed. It is checked at construction, registration,
+admission, token issuance/refresh and protected resource access, so revoking
+host authorization also rejects previously issued development credentials. Use
+the same provider instance in registration and native application policies;
+copying/spreading the provider does not transfer authorization. Keep the
+callback synchronous, side-effect-free and based on trusted server deployment
+settings, never a request header, client evidence or public frontend
+configuration.
+
+The credential environment remains `development`, even when `NODE_ENV` is
+`production`. Hardware/production credential policies still reject this
+provider. Removing/replacing the native application policy also invalidates
+development token authority. Hardware and development credentials cannot be
+substituted.
+
+**The host must deny development authentication in production deployments**, and
+should omit the provider there entirely. For example, set `FIPA_DEPLOYMENT` to
+`production` and leave the allow flag unset; the callback above denies even if
+someone accidentally includes the provider. Use a separate E2E OAuth client and
+server/database. There is no client runtime eligibility restriction: software
+evidence cannot establish that a caller is a simulator. The host deployment
+policy is the authorization boundary.
 
 Keep existing legacy providers and rollout policies in their existing
 composition; adding the shared development provider does not migrate or replace

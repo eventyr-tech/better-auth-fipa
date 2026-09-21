@@ -45,6 +45,10 @@ const hash = (value: string | Uint8Array) =>
 async function fixture(
   options: { ios?: boolean; emailOTP?: boolean; development?: boolean } = {},
 ) {
+  const deployment = {
+    allowDevelopmentAuthentication: true,
+    target: "local-e2e" as "local-e2e" | "production",
+  };
   const app = "TEAM.sdk";
   const providerKey = randomBytes(32).toString("base64");
   const softwareKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
@@ -67,6 +71,9 @@ async function fixture(
   const provider: DeviceAttestationProvider = options.development
     ? developmentProvider({
         enabled: true,
+        authorize: () =>
+          deployment.allowDevelopmentAuthentication &&
+          deployment.target === "local-e2e",
         environment: "development",
         applicationIds: [app],
       })
@@ -291,6 +298,7 @@ async function fixture(
   const requests: Parameters<FirstPartyClientPorts["send"]>[0][] = [];
   const responses: Record<string, unknown>[] = [];
   const controls = {
+    beforeSend: undefined as ((url: string) => void) | undefined,
     missingKey: false,
     loseTokenResponse: false,
     loseRegistrationResponse: false,
@@ -385,6 +393,7 @@ async function fixture(
     },
     send: async (request) => {
       requests.push(request);
+      controls.beforeSend?.(request.url);
       const response = await auth.handler(
         new Request(request.url, {
           method: request.method,
@@ -553,6 +562,7 @@ async function fixture(
     sentOTP,
     nativeOptions,
     softwareEvidence,
+    deployment,
   };
 }
 
@@ -2718,9 +2728,15 @@ describe("development native protocol failure boundaries", () => {
       }),
     ).toBe(0);
   });
-  it.each(["provider", "environment", "production-runtime"])(
+  it.each([
+    "provider",
+    "environment",
+    "deployment-authorization",
+    "production-deployment",
+  ])(
     "rejects development token refresh and resource access after %s policy changes",
     async (change) => {
+      vi.stubEnv("NODE_ENV", "production");
       const f = await fixture({ ios: true, development: true });
       expect((await f.respond(await f.client.start("slot"))).kind).toBe(
         "authenticated",
@@ -2731,9 +2747,12 @@ describe("development native protocol failure boundaries", () => {
             .provider as DeviceAttestationProvider),
           id: "app-attest",
         };
+      if (change === "production-deployment")
+        f.deployment.target = "production";
       if (change === "environment")
         f.nativeOptions.applications[0]!.environment = "production";
-      if (change === "production-runtime") vi.stubEnv("NODE_ENV", "production");
+      if (change === "deployment-authorization")
+        f.deployment.allowDevelopmentAuthentication = false;
       try {
         const response = await f.client
           .fetch("slot", `${f.config.issuer}/sdk-resource`)
@@ -2749,13 +2768,14 @@ describe("development native protocol failure boundaries", () => {
   );
 });
 
-it("production denies initial development token issuance even after successful password verification", async () => {
+it("production deployment denies initial development token issuance even after successful password verification", async () => {
+  vi.stubEnv("NODE_ENV", "production");
   const f = await fixture({ ios: true, development: true });
   const step = await f.client.start("slot");
   const send = f.ports.send;
   f.ports.send = (request) => {
     if (request.url.endsWith("/oauth2/token"))
-      vi.stubEnv("NODE_ENV", "production");
+      f.deployment.target = "production";
     return send(request);
   };
   try {
@@ -2785,8 +2805,9 @@ it("a server without the development provider rejects development registration",
 // Exercise the shipped TypeScript provider and real server verification. Only
 // generic device storage/HTTP ports are replaced; evidence and DPoP are real.
 it.each(["ios", "android"])(
-  "runs shared development password/OTP, restore, fetch, cancellation and logout on %s",
+  "runs authorized local E2E with NODE_ENV=production: password/OTP, restore, fetch, cancellation and logout on %s",
   async (platform) => {
+    vi.stubEnv("NODE_ENV", "production");
     const f = await fixture({ ios: true, development: true, emailOTP: true });
     const stored = new Map<string, string>();
     vi.doMock("@react-native-async-storage/async-storage", () => ({
@@ -2941,9 +2962,38 @@ it.each(["ios", "android"])(
       expect(await sdk.accounts.list()).toEqual([]);
     } finally {
       vi.doUnmock("react-native");
+      vi.unstubAllEnvs();
       vi.doUnmock("@react-native-async-storage/async-storage");
       vi.resetModules();
     }
   },
   30_000,
+);
+
+it.each(["challenge", "verify"])(
+  "rechecks host authorization at admission %s with NODE_ENV=production",
+  async (endpoint) => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      const f = await fixture({ ios: true, development: true });
+      await f.respond(await f.client.start("slot"));
+      await f.client.logout("slot");
+      f.controls.beforeSend = (url) => {
+        if (url.endsWith(`/first-party/attestation/${endpoint}`))
+          f.deployment.target = "production";
+      };
+      await expect(f.client.start("slot")).rejects.toBeInstanceOf(
+        FirstPartyClientError,
+      );
+      expect(f.deployment.target).toBe("production");
+      expect(
+        await f.context.adapter.count({
+          model: "firstPartyTokenFamily",
+          where: [{ field: "status", value: "active" }],
+        }),
+      ).toBe(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
 );

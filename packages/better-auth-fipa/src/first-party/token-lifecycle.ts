@@ -935,10 +935,7 @@ function checkPolicy(
     throw invalidGrant();
   if (
     !application ||
-    !developmentPolicyAllowed(
-      application.provider.id,
-      application.environment,
-    ) ||
+    !developmentPolicyAllowed(application.provider, application.environment) ||
     family.assurance.provider !== application.provider.id ||
     family.assurance.applicationId !== application.applicationId ||
     family.assurance.environment !== application.environment ||

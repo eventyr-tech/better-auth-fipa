@@ -395,12 +395,14 @@ const next = await fipa.start(account.slotId);
 ```
 
 Configure the server's `developmentProvider` as described in the server README.
-Both opt-ins are required. Setting only `environment: "development"` does not
-select software evidence. Android cloud-project/Play Integrity configuration is
-not required for this provider. Hardware attestation failures never select it
-automatically. There is deliberately no simulator detection: explicit
-development mode also works on development devices. It never grants hardware
-assurance.
+Both opt-ins are required, including the server's host-controlled `authorize()`
+policy. A production-built local E2E server may keep `NODE_ENV=production`;
+credential environment remains `development`. Setting only
+`environment: "development"` does not select software evidence. Android
+cloud-project/Play Integrity configuration is not required for this provider.
+Hardware attestation failures never select it automatically. There is
+deliberately no simulator detection: explicit development mode also works on
+development devices. It never grants hardware assurance.
 
 The SDK owns software P-256 keys, evidence, DPoP signing, persistence,
 transport, account catalog, leases, session rotation and cleanup. Evidence and
