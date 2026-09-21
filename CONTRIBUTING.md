@@ -143,3 +143,13 @@ declarations, and runs the full server Drizzle contracts. If one publication
 succeeds and the other fails, finish the missing publication without attempting
 to republish or overwrite the successful version. Announce the pair only after
 the registry verification succeeds.
+
+For simulator-provider changes, boot a dedicated iOS Simulator and run
+`FIPA_SIMULATOR_UDID=<device-uuid> pnpm verify:ios-simulator`. This installs a
+small native test app, verifies simulator evidence with the real server
+provider, checks DPoP signatures, preserves Keychain keys/vault data across app
+relaunch, checks hardware-key separation and removes the test app afterward. It
+uses software keys and does not certify physical-device App Attest or React
+Native UI flows. The TypeScript integration suite covers the public SDK
+composition and real Better Auth password/OTP/token/resource/lifecycle endpoints
+with native test ports.

@@ -30,7 +30,8 @@ class DeviceAttestationAppAttest: NSObject {
       do {
         let service = DCAppAttestService.shared
         guard service.isSupported else {
-          throw AppAttestError.unsupported
+          reject("app_attest_unavailable", "App Attest is unavailable on this runtime.", nil)
+          return
         }
         let key = try await AppAttestKeyCoordinator.shared.prepare(prefix: storagePrefix, scope: credentialScope) {
           try await service.generateKey()
@@ -62,7 +63,8 @@ class DeviceAttestationAppAttest: NSObject {
         let clientDataHash = Data(SHA256.hash(data: clientDataBytes))
         let service = DCAppAttestService.shared
         guard service.isSupported else {
-          throw AppAttestError.unsupported
+          reject("app_attest_unavailable", "App Attest is unavailable on this runtime.", nil)
+          return
         }
         let evidence: Data
         switch operation {

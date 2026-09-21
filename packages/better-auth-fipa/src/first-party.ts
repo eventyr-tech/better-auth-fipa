@@ -25,3 +25,5 @@ export type {
   AndroidKeyPolicy,
   PlayIntegrityPolicy,
 } from "./android.js";
+
+export { iosSimulator } from "./ios-simulator.js";

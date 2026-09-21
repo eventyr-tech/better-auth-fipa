@@ -1,3 +1,4 @@
+import { FirstPartyClientError } from "./errors.ts";
 import type { Spec as AppAttest } from "../NativeDeviceAttestation.ts";
 import type { Spec as Transport } from "../NativeFirstPartyTransport.ts";
 import type { SessionVaultNative } from "./session-coordinator.ts";
@@ -24,9 +25,20 @@ export function createIOSFirstPartyClient(
     vault: SessionVaultNative;
   },
 ) {
+  const provider = configuration.ios?.provider ?? "app-attest";
+  if (
+    !["app-attest", "ios-simulator"].includes(provider) ||
+    (provider === "ios-simulator" &&
+      configuration.environment !== "development")
+  )
+    throw new FirstPartyClientError("invalid_configuration");
+  const storagePrefix =
+    provider === "ios-simulator"
+      ? "DeviceAttestation.FirstParty.IOSSimulator.v1."
+      : keyIdStoragePrefix;
   const config: FirstPartyClientConfiguration = {
     ...configuration,
-    provider: "app-attest",
+    provider,
     storageNamespace:
       configuration.storageNamespace ?? "device-attestation.first-party.v1",
     accessibility: "when-unlocked",
@@ -36,7 +48,7 @@ export function createIOSFirstPartyClient(
     native,
     ({ aliases, send }) =>
       createIOSKeyPorts(
-        { ...config, keyIdStoragePrefix, aliases },
+        { ...config, provider, keyIdStoragePrefix: storagePrefix, aliases },
         {
           appAttest: native.appAttest,
           dpop: native.transport,
@@ -46,8 +58,7 @@ export function createIOSFirstPartyClient(
     {
       normalizeReference: (identity) => ({
         ...identity,
-        providerStoragePrefix:
-          identity.providerStoragePrefix ?? keyIdStoragePrefix,
+        providerStoragePrefix: identity.providerStoragePrefix ?? storagePrefix,
       }),
     },
   );
@@ -55,14 +66,23 @@ export function createIOSFirstPartyClient(
     ...client,
     accounts: {
       ...client.accounts,
-      importIOSKeys: async (reference: RetainedIOSKeyReference) =>
-        catalog.importRetained(
+      importIOSKeys: async (reference: RetainedIOSKeyReference) => {
+        if (provider === "ios-simulator")
+          throw new FirstPartyClientError("invalid_configuration");
+        return catalog.importRetained(
           await readRetainedIOSKeys(reference, {
             appAttest: native.appAttest,
             dpop: native.transport,
           }),
-        ),
-      resumeImport: () => catalog.resumeImport(),
+        );
+      },
+      resumeImport: () => {
+        if (provider === "ios-simulator")
+          return Promise.reject(
+            new FirstPartyClientError("invalid_configuration"),
+          );
+        return catalog.resumeImport();
+      },
     },
   };
 }

@@ -25,7 +25,8 @@
     "verify:ios-package": "turbo run build --filter=@eventyr-tech/react-native-fipa && node scripts/verify-ios-package.mjs",
     "verify:android-package": "turbo run build --filter=@eventyr-tech/react-native-fipa && node scripts/verify-android-package.mjs",
     "test:android": "pnpm --filter @eventyr-tech/react-native-fipa test:android",
-    "verify:android-app": "turbo run build --filter=@eventyr-tech/react-native-fipa && node scripts/verify-android-app.mjs"
+    "verify:android-app": "turbo run build --filter=@eventyr-tech/react-native-fipa && node scripts/verify-android-app.mjs",
+    "verify:ios-simulator": "turbo run build --filter=@eventyr-tech/better-auth-fipa && node scripts/verify-ios-simulator.mjs"
   },
   "devDependencies": {
     "prettier": "^3.8.1",

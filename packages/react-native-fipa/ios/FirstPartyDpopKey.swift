@@ -48,6 +48,10 @@ enum FirstPartyDpopKey {
     }
   }
   static func prepare(alias: String) throws -> String {
+#if targetEnvironment(simulator)
+    // Hardware composition never falls back to simulator software keys.
+    throw FirstPartyKeyError.unavailable
+#else
     lock.lock(); defer { lock.unlock() }
     do { return try inspect(alias: alias) }
     catch FirstPartyKeyError.missing { /* Only an authoritative absent item permits creation. */ }
@@ -67,6 +71,7 @@ enum FirstPartyDpopKey {
     // permission to rotate a key that another runtime may already be using.
     guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else { throw FirstPartyKeyError.failed }
     return try thumbprint(publicJwk(key))
+#endif
   }
 
   static func proof(alias: String, expectedThumbprint: String, url: String, method: String,
@@ -74,8 +79,8 @@ enum FirstPartyDpopKey {
     let key = try existing(alias: alias)
     return try proof(key: key, expectedThumbprint: expectedThumbprint, url: url, method: method, accessToken: accessToken, nonce: nonce)
   }
-  /// Encoding helper for deterministic software-key tests. The bridge only calls
-  /// the alias overload above, which enforces an existing Secure Enclave key.
+  /// Shared encoding for hardware keys and the explicitly selected simulator
+  /// module. The hardware bridge uses only the Secure Enclave alias overload.
   static func proof(key: SecKey, expectedThumbprint: String, url: String, method: String,
                     accessToken: String?, nonce: String?) throws -> String {
     let jwk = try publicJwk(key)

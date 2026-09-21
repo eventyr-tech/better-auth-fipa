@@ -17,6 +17,8 @@ export type NativeFirstPartyConfiguration = Omit<
   "provider" | "storageNamespace" | "accessibility"
 > & {
   storageNamespace?: string;
+  /** Explicit development-only iOS Simulator software keys; never a fallback. */
+  ios?: { provider: "app-attest" | "ios-simulator" };
   /** Required on Android; never selects a software-key fallback. */
   android?: { cloudProjectNumber: string; securityLevel: "tee" | "strongbox" };
 };

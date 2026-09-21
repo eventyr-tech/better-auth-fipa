@@ -1,3 +1,4 @@
+import { iosSimulator } from "../../../better-auth-fipa/src/ios-simulator.js";
 import { androidIdentitySchema } from "./android-identity.ts";
 import { iosIdentitySchema } from "./ios-identity.ts";
 import { createMemorySessionVault as vault } from "../test-fixtures/session-vault.ts";
@@ -41,30 +42,55 @@ import {
 const random = () => randomBytes(32).toString("base64url");
 const hash = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest();
-async function fixture(options: { ios?: boolean; emailOTP?: boolean } = {}) {
+async function fixture(
+  options: { ios?: boolean; emailOTP?: boolean; simulator?: boolean } = {},
+) {
   const app = "TEAM.sdk";
   const providerKey = randomBytes(32).toString("base64");
-  const provider: DeviceAttestationProvider = {
-    id: options.ios ? "app-attest" : "sdk-test",
-    maxEvidenceBytes: 1024,
-    decodeKeyId: (value) => Buffer.from(value, "base64"),
-    verifyRegistration: () =>
-      Promise.resolve({
-        applicationId: app,
-        environment: "production",
-        publicKey: "fixture",
-        counter: 0,
-        extensionsPresent: false,
+  const simulatorKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const simulatorEvidence = (keyId: string, data: string, operation: string) =>
+    Buffer.from(
+      JSON.stringify({
+        version: 1,
+        provider: "ios-simulator",
+        operation,
+        jwk: simulatorKey.publicKey.export({ format: "jwk" }),
+        signature: sign(
+          "sha256",
+          Buffer.from(
+            `fipa/ios-simulator/v1\n${operation}\n${keyId}\n${hash(Buffer.from(data, "base64url")).toString("base64")}`,
+          ),
+          { key: simulatorKey.privateKey, dsaEncoding: "ieee-p1363" },
+        ).toString("base64url"),
       }),
-    verifyAssertion: ({ credential, clientDataHash, evidence }) => {
-      if (!Buffer.from(evidence).equals(Buffer.from(clientDataHash)))
-        return Promise.reject(new Error("bad evidence"));
-      return Promise.resolve({
-        counter: credential.counter + 1,
-        extensionsPresent: false,
-      });
-    },
-  };
+    ).toString("base64");
+  const provider: DeviceAttestationProvider = options.simulator
+    ? iosSimulator({
+        enabled: true,
+        environment: "development",
+        applicationIds: [app],
+      })
+    : {
+        id: options.ios ? "app-attest" : "sdk-test",
+        maxEvidenceBytes: 1024,
+        decodeKeyId: (value) => Buffer.from(value, "base64"),
+        verifyRegistration: () =>
+          Promise.resolve({
+            applicationId: app,
+            environment: "production",
+            publicKey: "fixture",
+            counter: 0,
+            extensionsPresent: false,
+          }),
+        verifyAssertion: ({ credential, clientDataHash, evidence }) => {
+          if (!Buffer.from(evidence).equals(Buffer.from(clientDataHash)))
+            return Promise.reject(new Error("bad evidence"));
+          return Promise.resolve({
+            counter: credential.counter + 1,
+            extensionsPresent: false,
+          });
+        },
+      };
   const oauthOptions = {
     loginPage: "/login",
     consentPage: "/consent",
@@ -108,7 +134,7 @@ async function fixture(options: { ios?: boolean; emailOTP?: boolean } = {}) {
         clientId: "mobile",
         provider,
         applicationId: app,
-        environment: "production",
+        environment: options.simulator ? "development" : "production",
         scopes: ["offline_access"],
         resources: [],
       },
@@ -390,7 +416,9 @@ async function fixture(options: { ios?: boolean; emailOTP?: boolean } = {}) {
     clientId: "mobile",
     applicationId: app,
     provider: provider.id,
-    environment: "production" as const,
+    environment: options.simulator
+      ? ("development" as const)
+      : ("production" as const),
     storageNamespace: "test-sdk",
     scopes: ["offline_access"],
     resources: [],
@@ -433,6 +461,7 @@ async function fixture(options: { ios?: boolean; emailOTP?: boolean } = {}) {
     ports.keys = createIOSKeyPorts(
       {
         ...config,
+        provider: options.simulator ? "ios-simulator" : "app-attest",
         keyIdStoragePrefix: "fixture.app-attest.",
         aliases: () =>
           Promise.resolve({
@@ -454,6 +483,8 @@ async function fixture(options: { ios?: boolean; emailOTP?: boolean } = {}) {
             return Promise.resolve({ keyId: providerKey, created });
           },
           generateEvidence: (_key, data, operation) => {
+            if (options.simulator)
+              return Promise.resolve(simulatorEvidence(_key, data, operation));
             if (operation === "register") {
               controls.nativeRegistrations++;
               // An irreversible Apple operation must have a durable journal first.
@@ -520,6 +551,8 @@ async function fixture(options: { ios?: boolean; emailOTP?: boolean } = {}) {
     testUser,
     completeBrowser,
     sentOTP,
+    nativeOptions,
+    simulatorEvidence,
   };
 }
 
@@ -888,59 +921,62 @@ describe("FiPA client against real Better Auth endpoints", () => {
     ).toEqual(start);
     expect(f.ports.keys.prepare).toHaveBeenCalledOnce();
   });
-  it("runs the native OTP lifecycle without persisting submitted email or OTP and restores its typed continuation", async () => {
-    const f = await fixture({ emailOTP: true, ios: true });
-    const start = await f.client.start("slot");
-    if (start.kind !== "interaction-required")
-      throw new Error("expected method selection");
-    expect(start.step).toMatchObject({
-      kind: "authentication",
-      methods: ["password", "email-otp"],
-    });
-    const sent = await f.client.respond("slot", {
-      flowId: start.flowId,
-      stepId: start.step.id,
-      response: { kind: "email-otp-request", email: f.testUser.email },
-    });
-    if (sent.kind !== "interaction-required")
-      throw new Error("expected OTP step");
-    expect(sent.step.kind).toBe("email-otp");
-    expect(f.sentOTP).toHaveLength(1);
-    expect(f.storage.record.sessionJSON).not.toContain(f.testUser.email);
-    const restarted = createFirstPartyClientCore(f.config, f.ports);
-    expect(await restarted.restore("slot")).toEqual(sent);
-    const wrong = await restarted.respond("slot", {
-      flowId: sent.flowId,
-      stepId: sent.step.id,
-      response: { kind: "email-otp", otp: "invalid-code" },
-    });
-    if (wrong.kind !== "interaction-required")
-      throw new Error("expected retry step");
-    expect(wrong.failure).toBe("invalid_credentials");
-    expect(f.storage.record.sessionJSON).not.toContain("invalid-code");
-    const result = await restarted.respond("slot", {
-      flowId: wrong.flowId,
-      stepId: wrong.step.id,
-      response: { kind: "email-otp", otp: f.sentOTP[0]!.otp },
-    });
-    expect(result.kind).toBe("authenticated");
-    const stored = JSON.parse(f.storage.record.sessionJSON!) as Record<
-      string,
-      unknown
-    >;
-    expect(stored).not.toHaveProperty("otp");
-    expect(stored).not.toHaveProperty("email");
-    expect(
-      await restarted.fetch("slot", `${f.config.issuer}/sdk-resource`),
-    ).toMatchObject({ status: 200 });
-    expect(
-      await createFirstPartyClientCore(f.config, f.ports).restore("slot"),
-    ).toMatchObject({ kind: "authenticated" });
-    expect(await restarted.logout("slot")).toMatchObject({
-      remote: "confirmed",
-      keys: "retained",
-    });
-  });
+  it.each([false, true])(
+    "runs the native OTP lifecycle without persisting submitted email or OTP and restores its typed continuation (simulator: %s)",
+    async (simulator) => {
+      const f = await fixture({ emailOTP: true, ios: true, simulator });
+      const start = await f.client.start("slot");
+      if (start.kind !== "interaction-required")
+        throw new Error("expected method selection");
+      expect(start.step).toMatchObject({
+        kind: "authentication",
+        methods: ["password", "email-otp"],
+      });
+      const sent = await f.client.respond("slot", {
+        flowId: start.flowId,
+        stepId: start.step.id,
+        response: { kind: "email-otp-request", email: f.testUser.email },
+      });
+      if (sent.kind !== "interaction-required")
+        throw new Error("expected OTP step");
+      expect(sent.step.kind).toBe("email-otp");
+      expect(f.sentOTP).toHaveLength(1);
+      expect(f.storage.record.sessionJSON).not.toContain(f.testUser.email);
+      const restarted = createFirstPartyClientCore(f.config, f.ports);
+      expect(await restarted.restore("slot")).toEqual(sent);
+      const wrong = await restarted.respond("slot", {
+        flowId: sent.flowId,
+        stepId: sent.step.id,
+        response: { kind: "email-otp", otp: "invalid-code" },
+      });
+      if (wrong.kind !== "interaction-required")
+        throw new Error("expected retry step");
+      expect(wrong.failure).toBe("invalid_credentials");
+      expect(f.storage.record.sessionJSON).not.toContain("invalid-code");
+      const result = await restarted.respond("slot", {
+        flowId: wrong.flowId,
+        stepId: wrong.step.id,
+        response: { kind: "email-otp", otp: f.sentOTP[0]!.otp },
+      });
+      expect(result.kind).toBe("authenticated");
+      const stored = JSON.parse(f.storage.record.sessionJSON!) as Record<
+        string,
+        unknown
+      >;
+      expect(stored).not.toHaveProperty("otp");
+      expect(stored).not.toHaveProperty("email");
+      expect(
+        await restarted.fetch("slot", `${f.config.issuer}/sdk-resource`),
+      ).toMatchObject({ status: 200 });
+      expect(
+        await createFirstPartyClientCore(f.config, f.ports).restore("slot"),
+      ).toMatchObject({ kind: "authenticated" });
+      expect(await restarted.logout("slot")).toMatchObject({
+        remote: "confirmed",
+        keys: "retained",
+      });
+    },
+  );
 
   it("persists resend guidance and rejects responses not offered by the current step before HTTP", async () => {
     const f = await fixture({ emailOTP: true });
@@ -1062,14 +1098,19 @@ describe("FiPA client against real Better Auth endpoints", () => {
   });
 
   it.each([
-    [false, false, false],
+    [false, false, false, true],
+    [false, false, false, false],
     [true, false, false],
     [true, true, false],
     [true, true, true],
   ])(
     "composes the iOS SDK (retained keys: %s, interrupted import: %s, recover import: %s)",
-    async (imported, interrupted, recoverImport) => {
-      const f = await fixture({ ios: true });
+    async (imported, interrupted, recoverImport, simulator = false) => {
+      const f = await fixture({ ios: true, simulator });
+      const nativeConfig = {
+        ...f.config,
+        ...(simulator ? { ios: { provider: "ios-simulator" as const } } : {}),
+      };
       const indexStorage = vault();
       const identity = await f.ports.keys.prepare("slot");
       const reference = {
@@ -1136,9 +1177,11 @@ describe("FiPA client against real Better Auth endpoints", () => {
           getOrCreateKey,
           generateEvidence: (_key, data, operation) =>
             Promise.resolve(
-              operation === "register"
-                ? Buffer.from("fixture").toString("base64")
-                : hash(Buffer.from(data, "base64url")).toString("base64"),
+              simulator
+                ? f.simulatorEvidence(_key, data, operation)
+                : operation === "register"
+                  ? Buffer.from("fixture").toString("base64")
+                  : hash(Buffer.from(data, "base64url")).toString("base64"),
             ),
           resetKey: () => Promise.reject(new Error("must not reset")),
           removeKey: () => {
@@ -1193,7 +1236,32 @@ describe("FiPA client against real Better Auth endpoints", () => {
           cancelBrowser: () => Promise.resolve(),
         },
       };
-      const sdk = createIOSFirstPartyClient(f.config, native);
+      let compose = () => createIOSFirstPartyClient(nativeConfig, native);
+      if (simulator) {
+        vi.doMock("react-native", () => ({
+          Platform: { OS: "ios" },
+          TurboModuleRegistry: {
+            get: (name: string) =>
+              (
+                ({
+                  DeviceAttestationIOSSimulator: {
+                    ...native.appAttest,
+                    ...native.transport,
+                  },
+                  DeviceAttestationSessionVault: native.vault,
+                  DeviceAttestationFirstPartyTransport: native.transport,
+                }) as Record<string, unknown>
+              )[name] ?? null,
+          },
+        }));
+        const { createNativeFirstPartyClient } =
+          await import("./native-client.ts");
+        compose = () =>
+          createNativeFirstPartyClient(nativeConfig) as ReturnType<
+            typeof createIOSFirstPartyClient
+          >;
+      }
+      const sdk = compose();
       let account: Awaited<ReturnType<typeof sdk.accounts.create>>;
       if (interrupted) {
         const commit = f.storage.native.commit;
@@ -1255,7 +1323,7 @@ describe("FiPA client against real Better Auth endpoints", () => {
         },
       });
       expect(signedIn.kind).toBe("authenticated");
-      const restarted = createIOSFirstPartyClient(f.config, native);
+      const restarted = compose();
       await expect(restarted.restore(account.slotId)).resolves.toEqual(
         signedIn,
       );
@@ -1280,6 +1348,7 @@ describe("FiPA client against real Better Auth endpoints", () => {
         code: "invalid_request",
       });
       expect(prepareDpop).toHaveBeenCalledTimes(imported ? 0 : 1);
+      if (simulator) vi.doUnmock("react-native");
     },
   );
 
@@ -2647,4 +2716,99 @@ describe("local origins at the client boundary", () => {
       });
     }
   });
+});
+
+describe("simulator native protocol failure boundaries", () => {
+  it("keeps failed password and cancelled OTP attempts signed out", async () => {
+    const f = await fixture({ ios: true, simulator: true, emailOTP: true });
+    const wrong = await f.respond(await f.client.start("slot"), "incorrect");
+    expect(wrong).toMatchObject({
+      kind: "interaction-required",
+      failure: "invalid_credentials",
+    });
+    await f.client.cancel("slot");
+    expect(await f.client.restore("slot")).toMatchObject({
+      kind: "signed-out",
+    });
+    const start = await f.client.start("slot");
+    if (start.kind !== "interaction-required")
+      throw new Error("expected interaction");
+    await f.client.respond("slot", {
+      flowId: start.flowId,
+      stepId: start.step.id,
+      response: { kind: "email-otp-request", email: f.testUser.email },
+    });
+    await f.client.cancel("slot");
+    await expect(
+      f.client.fetch("slot", `${f.config.issuer}/sdk-resource`),
+    ).rejects.toMatchObject({ code: "reauthentication_required" });
+    expect(
+      await f.context.adapter.count({
+        model: "firstPartyTokenFamily",
+        where: [{ field: "status", value: "active" }],
+      }),
+    ).toBe(0);
+  });
+  it.each(["provider", "environment", "production-runtime"])(
+    "rejects simulator token refresh and resource access after %s policy changes",
+    async (change) => {
+      const f = await fixture({ ios: true, simulator: true });
+      expect((await f.respond(await f.client.start("slot"))).kind).toBe(
+        "authenticated",
+      );
+      if (change === "provider")
+        f.nativeOptions.applications[0]!.provider = {
+          ...(f.nativeOptions.applications[0]!
+            .provider as DeviceAttestationProvider),
+          id: "app-attest",
+        };
+      if (change === "environment")
+        f.nativeOptions.applications[0]!.environment = "production";
+      if (change === "production-runtime") vi.stubEnv("NODE_ENV", "production");
+      try {
+        const response = await f.client
+          .fetch("slot", `${f.config.issuer}/sdk-resource`)
+          .catch((e: unknown) => e);
+        expect(response).not.toMatchObject({ status: 200 });
+        await expect(f.client.restore("slot")).rejects.toBeInstanceOf(
+          FirstPartyClientError,
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+});
+
+it("production denies initial simulator token issuance even after successful password verification", async () => {
+  const f = await fixture({ ios: true, simulator: true });
+  const step = await f.client.start("slot");
+  const send = f.ports.send;
+  f.ports.send = (request) => {
+    if (request.url.endsWith("/oauth2/token"))
+      vi.stubEnv("NODE_ENV", "production");
+    return send(request);
+  };
+  try {
+    await expect(f.respond(step)).rejects.toBeInstanceOf(FirstPartyClientError);
+    expect(await f.context.adapter.count({ model: "oauthRefreshToken" })).toBe(
+      0,
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+it("a server without the simulator provider rejects simulator registration", async () => {
+  const f = await fixture({ ios: true });
+  await expect(
+    f.auth.api.createDeviceAttestationChallenge!({
+      body: {
+        provider: "ios-simulator",
+        applicationId: f.config.applicationId,
+        keyId: randomBytes(32).toString("base64"),
+        operation: "register",
+        purpose: "credential-registration",
+      },
+    }),
+  ).rejects.toThrow();
 });

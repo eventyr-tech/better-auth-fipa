@@ -368,3 +368,75 @@ updated.
    opt-out/nonlocal HTTP rejection. This change permits local HTTP transport; it
    does not change simulator attestation capabilities or server authentication
    policy.
+
+### Explicit iOS Simulator development mode
+
+Starting with `0.1.0-alpha.2`, the supported public factory can run the native
+FiPA protocol on iOS Simulator. Install the matching server package
+`@eventyr-tech/better-auth-fipa@0.1.0-alpha.1`, install pods and rebuild the
+native app; an OTA JavaScript update alone cannot install the new native module.
+
+```ts
+import { createNativeFirstPartyClient } from "@eventyr-tech/react-native-fipa/first-party";
+
+const fipa = createNativeFirstPartyClient({
+  issuer: "http://eventyr.localhost:3000/api/auth",
+  clientId: "eventyr-ios-simulator", // separately registered development OAuth client
+  applicationId: "TEAM.io.eventyr.mobile",
+  environment: "development",
+  ios: { provider: "ios-simulator" }, // explicit opt-in; default is app-attest
+  allowInsecureLoopback: true,
+  scopes: ["offline_access"],
+  resources: [],
+});
+const account = await fipa.accounts.create();
+const next = await fipa.start(account.slotId);
+// Render next.step and use fipa.respond for password or email OTP as usual.
+```
+
+Configure the server's `iosSimulator` provider as described in the server
+README. Both opt-ins are required. Merely setting `environment: "development"`
+still uses Apple's development App Attest environment; it does not select
+simulator mode. The simulator module checks `targetEnvironment(simulator)`
+natively on every key operation. Physical devices reject it with
+`simulator_unavailable`, even if JavaScript requests it. Hardware attestation
+failure never triggers fallback.
+
+This provider proves possession of **development software keys**, not device
+integrity, Secure Enclave storage, genuine-app identity, or App Attest
+assurance. Simulator evidence uses the distinct `ios-simulator` provider
+identity and only the `development` environment. The SDK owns its software keys,
+DPoP signing, Keychain vault, transports, account catalog, leases, session
+rotation and cleanup. Its catalog namespace includes provider and environment
+even with a custom `storageNamespace`. Simulator keys also use a separate native
+Keychain tag domain. Hardware retained-key import is rejected in simulator mode.
+Use separate OAuth client IDs and development servers/databases; omit the server
+provider from hosted production. A modified client can forge development
+evidence: native eligibility is an SDK guard, not a remote hardware security
+guarantee.
+
+`allowInsecureLoopback` remains independent and defaults to false. HTTP is
+allowed only for loopback addresses, `localhost`, and `*.localhost` (including
+`eventyr.localhost`), never arbitrary remote HTTP origins. Simulator mode does
+not relax HTTPS or enable browser authentication.
+
+The existing password/email-OTP, `fetch`, `restore`, `logout`, `cancel` and
+account lifecycle APIs are unchanged. On relaunch, call `accounts.list()` and
+`restore` for a saved slot. Never persist passwords or OTPs yourself. Permanent
+native failures now retain actionable `FirstPartyClientError.code` values:
+`app_attest_unavailable`, `simulator_unavailable`, `key_unavailable`,
+`key_locked` and `key_invalid_input`. `invalid_configuration` covers
+incompatible provider, environment and transport configuration. Errors contain
+no original native exception, password, OTP, token or proof. Missing keys still
+require registration recovery; unknown native failures remain
+`operation_failed`.
+
+FiPA establishes authentication; Eventyr owns onboarding. After successful
+native email OTP, use `fipa.fetch` to check the account's password status. For
+an existing password, `logout` the OTP session and display native password login
+with the email prefilled. For a new account, collect name/password once in-app,
+submit the host's protected setup operation, end the OTP session as required by
+the host's security policy, and authenticate using that same just-entered
+password in memory. Do not ask for it a second time or persist it. No external
+browser or legacy device-code pairing is needed for these native flows. Existing
+legacy rollout APIs remain available and unchanged.

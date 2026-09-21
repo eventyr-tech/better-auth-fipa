@@ -1,3 +1,4 @@
+import { simulatorPolicyAllowed } from "../ios-simulator.js";
 import type { GenericEndpointContext } from "@better-auth/core";
 import { createDpopReplayStore } from "@better-auth/core/oauth2";
 import { APIError } from "better-auth/api";
@@ -247,6 +248,7 @@ export async function consumeNativeAdmission<T>(
     if (
       (receipt.expiresAt !== undefined &&
         new Date(receipt.expiresAt) <= new Date()) ||
+      !simulatorPolicyAllowed(policy.provider.id, policy.environment) ||
       (isAndroidHardwareProvider(policy.provider) &&
         (!receipt.expiresAt || !receipt.evidence)) ||
       !equalBytes(bindingHash, Buffer.from(receipt.bindingHash, "base64url")) ||
@@ -278,6 +280,7 @@ export function requireNativeApplicationPolicy(
 ): NativeAdmissionBinding {
   const binding = normalizeNativeAdmissionBinding(input);
   if (
+    !simulatorPolicyAllowed(policy.provider.id, policy.environment) ||
     (isAndroidHardwareProvider(policy.provider) &&
       (policy.applicationId !== policy.provider.applicationId ||
         policy.environment !== "production")) ||

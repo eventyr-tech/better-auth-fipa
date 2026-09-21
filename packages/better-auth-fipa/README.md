@@ -450,3 +450,86 @@ request bodies in issues or fixtures.
 ## License
 
 [MIT](LICENSE)
+
+### Opt-in iOS Simulator server provider (development only)
+
+`0.1.0-alpha.1` adds `iosSimulator` to the public `/first-party` entry point for
+`@eventyr-tech/react-native-fipa@0.1.0-alpha.2` clients. It uses the same
+registration, native admission, password/email-OTP, DPoP token, resource and
+lifecycle endpoints. It does not redirect native authentication through legacy
+device-code pairing.
+
+```ts
+import { createDeviceAttestation } from "@eventyr-tech/better-auth-fipa";
+import {
+  iosSimulator,
+  createNativeFirstPartyPlugin,
+} from "@eventyr-tech/better-auth-fipa/first-party";
+
+// Execute only in your explicitly selected local/development server composition.
+const simulator = iosSimulator({
+  enabled: true,
+  environment: "development",
+  applicationIds: ["TEAM.io.eventyr.mobile"],
+});
+const device = createDeviceAttestation({
+  providers: [simulator],
+  purposes: {
+    credentialRegistration: {},
+    oauthAuthorization: {
+      protectedClientIds: ["eventyr-ios-simulator"],
+      requireDpopJkt: true,
+    },
+  },
+});
+const applications = [
+  {
+    clientId: "eventyr-ios-simulator",
+    provider: simulator,
+    applicationId: "TEAM.io.eventyr.mobile",
+    environment: "development" as const,
+    scopes: ["offline_access"],
+    resources: [],
+  },
+];
+// Supply applications to your existing NativeTokenOptions and install
+// device.serverPlugin, the OAuth provider and createNativeFirstPartyPlugin(options).
+// Pass the SAME options to requireNativeAccess. Keep explicit lifetime policies,
+// the email-otp plugin/delivery configuration, and real database transactions.
+```
+
+Register that separate public OAuth client with the normal native grant/scopes
+policy. The matching client must explicitly select
+`ios: { provider: "ios-simulator" }` and `environment: "development"`. Continue
+to protect resources with `requireNativeAccess`; a generic JWT or cookie check
+does not enforce FiPA's current provider policy. The server does not need a new
+schema migration for this provider; existing credential rows are keyed by
+provider/application/key identity.
+
+The evidence is a challenge-bound signature by a **software key**. It does not
+prove Apple App Attest, a genuine application, physical-device integrity or
+Secure Enclave possession. Assurance retains provider `ios-simulator` and
+environment `development`, never `app-attest`. The shared one-time challenge and
+database counter CAS prevent replay; its server counter is not an Apple hardware
+counter.
+
+The factory requires `enabled: true`, a development environment and an
+application allowlist. Production native policies reject it.
+`NODE_ENV=production` additionally rejects construction, registration,
+admission, token issuance/refresh and protected resource access.
+Removing/replacing the native application policy also invalidates simulator
+token authority. App Attest cannot verify simulator evidence, and hardware and
+simulator credentials cannot be substituted across policies.
+
+**The host application must omit this provider from hosted production**,
+including production deployments whose `NODE_ENV` is absent or misconfigured.
+Use a separate development OAuth client and server/database. The SDK's native
+simulator check prevents accidental physical-device use; it cannot stop a
+modified client from fabricating software evidence. Do not make deployment
+safety depend on that check.
+
+Keep existing legacy providers and rollout policies in their existing
+composition; adding the native simulator provider does not migrate or replace
+legacy device-code pairing. Profile/password setup and the decision to return an
+OTP-authenticated existing-password account to native password login remain host
+application policy.

@@ -38,6 +38,7 @@ type AdmissionContext = Parameters<
  * catalog, never derived from user input or changed after identity preparation. */
 export function createIOSKeyPorts(
   options: {
+    provider?: "app-attest" | "ios-simulator";
     issuer: string;
     clientId: string;
     applicationId: string;
@@ -178,7 +179,7 @@ export function createIOSKeyPorts(
       check(context);
       assertAdmissionBinding(binding, identity, {
         issuer,
-        provider: "app-attest",
+        provider: options.provider ?? "app-attest",
         clientId: options.clientId,
         applicationId: options.applicationId,
         environment: options.environment,
@@ -201,7 +202,7 @@ export function createIOSKeyPorts(
           await post(
             "/device-attestation/challenge",
             {
-              provider: "app-attest",
+              provider: options.provider ?? "app-attest",
               applicationId: options.applicationId,
               keyId: identity.providerKeyId,
               operation: "register",
